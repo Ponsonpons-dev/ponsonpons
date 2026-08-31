@@ -25,7 +25,7 @@ the full Phase 0 discovery and design rationale.
 
 ## Fee matrix (per launch, immutable from creation)
 
-- Base curve/hook fee: 1% of every trade's quote leg → 30% protocol / 70% creator.
+- Base curve/hook fee: 1% of every trade's quote leg → 50% protocol / 50% creator (protocol share at the hook's hard cap).
 - Creator fee: 0-2%, creator-chosen, all to creator.
 - Cashback mode (carved from the creator's take, so trader cost never changes):
   - **QuoteBurn**: that share of the quote token goes to `0xdead`, pre- and post-graduation. No swap, no oracle, no operator.

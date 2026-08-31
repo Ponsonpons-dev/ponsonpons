@@ -46,7 +46,7 @@ contract PopFixture is Test, DeployPermit2 {
     address internal bob = makeAddr("bob");
     address internal keeper = makeAddr("keeper");
 
-    uint16 internal constant PROTOCOL_SHARE_BPS = 3_000; // 30%
+    uint16 internal constant PROTOCOL_SHARE_BPS = 5_000; // 50%, matching production (the hook's cap)
     uint256 internal constant HOOK_FEE_BPS = 100; // 1%
     uint256 internal constant MAX_IMPACT_BPS = 300; // 3%
     uint256 internal constant CURVE_FEE_BPS = 100; // 1%

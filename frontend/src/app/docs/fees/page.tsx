@@ -22,7 +22,7 @@ export default function FeesDoc() {
           <tr>
             <td>Base fee</td>
             <td>1% of the trade</td>
-            <td>30% protocol, 70% creator</td>
+            <td>50% protocol, 50% creator</td>
           </tr>
           <tr>
             <td>Creator fee</td>

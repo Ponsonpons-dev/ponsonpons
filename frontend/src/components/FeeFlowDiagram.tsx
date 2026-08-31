@@ -2,9 +2,10 @@
 
 /**
  * Live fee-flow breakdown: where each 100 units of trade fee go under the
- * current create-form settings. Base fee is 1% of the trade (30% protocol /
- * 70% creator), creator fee is 0 to 2% on top (all creator), and the cashback
- * share is carved out of the creator's combined take.
+ * current create-form settings. Base fee is 1% of the trade (50% protocol /
+ * 50% creator, the hook's hard cap on the protocol side), creator fee is 0 to
+ * 2% on top (all creator), and the cashback share is carved out of the
+ * creator's combined take.
  */
 export function FeeFlowDiagram({
   creatorFeeBps,
@@ -17,7 +18,7 @@ export function FeeFlowDiagram({
 }) {
   const baseBps = 100;
   const totalBps = baseBps + creatorFeeBps;
-  const protocolBps = (baseBps * 3000) / 10_000;
+  const protocolBps = (baseBps * 5000) / 10_000;
   const creatorTakeBps = totalBps - protocolBps;
   const cashbackBps = cashbackMode === 0 ? 0 : (creatorTakeBps * cashbackShareBps) / 10_000;
   const creatorNetBps = creatorTakeBps - cashbackBps;

@@ -116,7 +116,7 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "What do you take?",
     a: (
       <>
-        30% of the 1% base fee, which is 0.3% of each trade, plus a small flat ETH fee at launch. We take
+        50% of the 1% base fee, which is 0.5% of each trade, plus a small flat ETH fee at launch. That share is at the hard cap coded into the hook, so it can never rise. We take
         nothing from the creator&apos;s own fee, nothing from cashback, and nothing from liquidity.
       </>
     ),

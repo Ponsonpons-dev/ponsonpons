@@ -59,7 +59,7 @@ contract RobinhoodForkTest is Test {
     /// cache together with `script/warm-fork-cache.sh`; the two must match.
     /// Override with FORK_BLOCK, or FORK_BLOCK=0 to fork from the head (which
     /// needs an archive endpoint or a very fresh block).
-    uint256 internal constant PINNED_FORK_BLOCK = 50869582;
+    uint256 internal constant PINNED_FORK_BLOCK = 51091865;
 
     bool internal forkEnabled;
 
@@ -106,7 +106,7 @@ contract RobinhoodForkTest is Test {
                 address(escrow),
                 treasury,
                 timelock,
-                uint256(3_000),
+                uint256(5_000),
                 uint256(100),
                 uint256(300)
             ),
