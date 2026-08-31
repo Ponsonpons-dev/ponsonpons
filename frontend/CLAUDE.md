@@ -85,5 +85,5 @@ from a clean `.next`.
 
 ## Deploying
 
-Vercel project `ponsonpons`, root directory `ponsonpons/frontend`, auto-deploys on push.
+Vercel project `ponsonpons`, root directory `frontend`, auto-deploys on push.
 `README.md` lists the environment variables and what degrades without each.

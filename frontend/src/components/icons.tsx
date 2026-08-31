@@ -16,6 +16,17 @@ const base = {
   "aria-hidden": true,
 };
 
+/** Image upload drop zone. */
+export function UploadImage({ className = "h-3.5 w-3.5" }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="2" y="2" width="12" height="12" rx="2.5" />
+      <path d="M2 11l3.2-3.2a1 1 0 0 1 1.4 0L10 11.2" />
+      <circle cx="10.25" cy="5.75" r="1.15" />
+    </svg>
+  );
+}
+
 /** Quote burn. */
 export function Flame({ className = "h-3.5 w-3.5" }: IconProps) {
   return (

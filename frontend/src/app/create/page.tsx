@@ -13,6 +13,7 @@ import {
 
 import { PopLaunchFactoryAbi } from "@/abis/PopLaunchFactory";
 import { FeeFlowDiagram } from "@/components/FeeFlowDiagram";
+import { ImageDrop } from "@/components/ImageDrop";
 import { ADDRESSES } from "@/lib/addresses";
 import { fmtAmount } from "@/lib/format";
 import { indexer } from "@/lib/indexer";
@@ -207,14 +208,8 @@ export default function CreatePage() {
           />
         </div>
         <div className="sm:col-span-2">
-          <label className="label">Image (IPFS or https URL)</label>
-          <input
-            className="input"
-            placeholder="ipfs://… (upload via Pinata or web3.storage)"
-            maxLength={512}
-            value={form.logo}
-            onChange={(e) => set("logo")(e.target.value)}
-          />
+          <label className="label">Image</label>
+          <ImageDrop value={form.logo} onChange={set("logo")} />
         </div>
         <div>
           <label className="label">Twitter / X</label>

@@ -35,9 +35,11 @@ will be functional until they point at a real deployment:
 | Variable | Notes |
 | --- | --- |
 | `NEXT_PUBLIC_INDEXER_URL` | Public URL of the Phase 2 Ponder app. Without it the site falls back to `localhost` and every list is empty. |
-| `NEXT_PUBLIC_LAUNCH_FACTORY` … `NEXT_PUBLIC_MULTISIG` | From `ponsonpons/contracts/deployments/4663.json` once the stack is actually deployed. |
+| `NEXT_PUBLIC_LAUNCH_FACTORY` … `NEXT_PUBLIC_PROTOCOL_OWNER` | From `contracts/deployments/4663.json` once the stack is actually deployed. |
+| `NEXT_PUBLIC_GOVERNANCE` | `timelock` or `direct`, matching how the stack was deployed. Drives what `/docs/proof` claims. |
 | `NEXT_PUBLIC_WALLETCONNECT_ID` | WalletConnect Cloud project id. Injected wallets work without it; WalletConnect does not. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical origin, used for OG/Twitter card URLs. |
+| `PINATA_JWT` | Server-side only, never `NEXT_PUBLIC`. Pinata API JWT used by `/api/upload` to pin launch images to IPFS. Without it the create page's image upload refuses with a clear message instead of pretending. |
 
 Two things that only break on a *clean* install, both fixed here and worth
 knowing if you touch dependencies: RainbowKit peers on wagmi v2 (v3 aborts
