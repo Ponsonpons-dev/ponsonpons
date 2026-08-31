@@ -5,4 +5,4 @@ RUN npm ci --omit=dev
 COPY . .
 EXPOSE 42069
 # Shell form so the platform-injected PORT is honored (Railway etc.).
-CMD npx ponder start --port ${PORT:-42069}
+CMD npx ponder start --port ${PORT:-42069} --schema ${DATABASE_SCHEMA:-pop}
