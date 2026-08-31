@@ -22,6 +22,8 @@ the full Phase 0 discovery and design rationale.
 | `PopGraduationGuard` / `PopGraduationExecutor` / `PopLaunchDeployer` | Seed preflight, Permit2+PositionManager mint encoding, CREATE2 deployment, split out for EIP-170 headroom, mirroring the reference architecture. |
 | `PopLocker` | Holds every graduated LP NFT and the virtual-reserve supply excess forever. No withdraw, no transfer, no arbitrary call. |
 | `PopFeeEscrow` | Pull-payment ledger for all revenue (protocol, creator, trader rebates). Ownerless. |
+| `PopRevenueSplitter` | The protocol fee recipient. Permissionless `distribute()`: 15% of claimed PONS revenue to the $POP token (paid to holders via its `sync()`), the rest to the owner. Holder share owner-adjustable; disclosed as such. |
+| `PopBuybackBurner` | $POP's creator fee recipient. Permissionless `distribute()` (75% owner / 25% retained, ratio immutable); keeper-cranked `buyAndBurn` swaps the retained PONS for $POP through its own pool and sends it to `0xdead`. |
 
 ## Fee matrix (per launch, immutable from creation)
 
@@ -31,6 +33,7 @@ the full Phase 0 discovery and design rationale.
   - **QuoteBurn**: that share of the quote token goes to `0xdead`, pre- and post-graduation. No swap, no oracle, no operator.
   - **TraderRebate**: that share is credited back to the trade's recipient in the same transaction (curve phase only; reverts to creator post-graduation, disclosed at creation).
   - **HolderRewards**: that share is pushed to the launch token, which pays it pro-rata to its holders continuously, before and after graduation. No staking, no snapshots, no operator. This is the only mode that changes the launch token: it deploys `PopRewardToken` (accounting-only transfer hook, still no owner/mint/pause/blacklist) instead of the inert `PopLaunchToken`.
+- Platform revenue: the protocol's 50% share accrues to `PopRevenueSplitter`, which routes 15% (adjustable) to $POP holders in PONS; $POP's own creator fees accrue to `PopBuybackBurner`, which burns $POP with 25% of them (immutable).
 - Anti-snipe: 99% → 0 exponential-decay tax over the launch window (snapshotted per launch), creator + declared bundle wallets exempt.
 
 ## Build & test

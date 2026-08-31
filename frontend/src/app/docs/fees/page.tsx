@@ -46,6 +46,62 @@ export default function FeesDoc() {
         cashback mode rather than disappearing).
       </p>
 
+      <h2>Worked example: $100 traded on any token</h2>
+      <p>
+        A launch with a 1% creator fee and 50% cashback pledged. Total fee: 2% of the quote leg.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Destination</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Protocol (via the revenue splitter, below)</td>
+            <td>$0.50</td>
+          </tr>
+          <tr>
+            <td>The token&apos;s creator</td>
+            <td>$0.75</td>
+          </tr>
+          <tr>
+            <td>The creator&apos;s cashback pledge (burn / rebate / holders)</td>
+            <td>$0.75</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Where the protocol&apos;s share goes: $POP holders included</h2>
+      <p>
+        The protocol&apos;s half of the base fee does not go to a wallet. It accrues to an on-chain{" "}
+        <strong>revenue splitter</strong> that anyone can trigger, and the splitter pays{" "}
+        <strong>15% of it to $POP holders</strong>, in $PONS, pro-rata by balance, with no staking and
+        no claim portal; the remainder goes to the protocol. Holding $POP is a share of the fee stream
+        of every token on the platform.
+      </p>
+      <p>
+        Per $100 traded on <em>any</em> token: $0.425 to the protocol, $0.075 to $POP holders.
+      </p>
+      <p>
+        Two disclosures, stated plainly. The holder percentage <strong>can be adjusted later on</strong>{" "}
+        by the protocol owner, in either direction, with immediate effect on revenue not yet
+        distributed; distributions that have already happened are history. And the splitter address is
+        snapshotted into every launch at creation, so the routing itself cannot be pulled out from under
+        an existing token.
+      </p>
+
+      <h2>$POP&apos;s own fees: buyback and burn</h2>
+      <p>
+        $POP launches with a 2% creator fee like any token could. Its creator revenue does not go to a
+        wallet either: it goes to an on-chain <strong>buyback burner</strong> whose split is a
+        constructor constant, checkable forever: <strong>25% of $POP&apos;s creator fees market-buy
+        $POP through its own pool and send it to the dead address</strong>; 75% goes to the protocol.
+        The burner&apos;s keeper only chooses timing; nothing that enters the burner can leave as
+        anything but burned $POP.
+      </p>
+
       <h2>The four cashback modes</h2>
 
       <h3>None</h3>

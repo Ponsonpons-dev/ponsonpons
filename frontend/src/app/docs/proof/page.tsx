@@ -10,6 +10,16 @@ const CONTRACTS: Array<{ name: string; address: `0x${string}`; note: string }> =
   { name: "PopHook", address: ADDRESSES.hook, note: "V4 fee hook; policy immutable in bytecode" },
   { name: "PopLocker", address: ADDRESSES.locker, note: "holds every LP NFT forever; no withdraw function" },
   { name: "PopFeeEscrow", address: ADDRESSES.feeEscrow, note: "pull-payment revenue ledger; no owner" },
+  {
+    name: "PopRevenueSplitter",
+    address: ADDRESSES.revenueSplitter,
+    note: "protocol fee recipient; routes 15% to $POP holders (share adjustable)",
+  },
+  {
+    name: "PopBuybackBurner",
+    address: ADDRESSES.buybackBurner,
+    note: "$POP creator-fee recipient; 25% buys and burns $POP (ratio immutable)",
+  },
   ...(GOVERNANCE === "timelock"
     ? ([
         { name: "Timelock (48h)", address: ADDRESSES.timelock, note: "owner of factory/hook/registry/locker" },
@@ -62,6 +72,10 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
         ? "Everything is owned by a 48h timelock, so any change is visible on-chain for two days before it can take effect. "
         : "The four ownable contracts are owned directly by the protocol owner, a single key, and its changes take effect immediately with no delay. That is the weakest part of this deployment and we would rather say so than imply a timelock we did not deploy. ") +
       "What that owner can reach is narrow and worth reading literally: launch configs and the snipe-tax window for FUTURE launches, and two rescue paths for quote tokens that turn hostile after listing. Those rescues pay only fixed recipients, the launch's own creator and the protocol treasury, so there is no address the owner can name. The reserve rescue unlocks only after 14 days, during which anyone can still complete the graduation permissionlessly. It cannot touch locked liquidity, cannot redirect a creator's fees, and cannot change the terms of a launch that already exists.",
+  },
+  {
+    claim: "$POP holders are paid by code, and $POP burns by code.",
+    how: "Protocol fees accrue to the revenue splitter, and anyone can trigger the split: 15% of the PONS goes to the $POP token contract and distributes pro-rata to holders on the spot. The percentage is owner-adjustable, in either direction, and we say so here rather than let you assume it is fixed; what is fixed is that past distributions cannot be clawed back. $POP's creator fees accrue to the buyback burner, whose 25% burn ratio is a constructor constant: that slice can only ever leave the contract as $POP sent to the dead address.",
   },
   {
     claim: "No proxies. No upgrades. Anywhere.",

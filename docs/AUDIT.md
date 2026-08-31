@@ -34,6 +34,8 @@ line-by-line diff and is the most useful section for a reviewer.
 | `PopLaunchToken.sol` | ~60 | Low, plain fixed-supply ERC-20 |
 | `PopRewardToken.sol` | ~180 | **High**, HolderRewards variant: holds and apportions the reward pot |
 | `PopRewardTokenDeployer.sol` | ~60 | Low, CREATE2 for the above |
+| `PopRevenueSplitter.sol` | ~90 | Medium, splits protocol revenue between owner and $POP holders; owner-adjustable share, permissionless crank |
+| `PopBuybackBurner.sol` | ~150 | **High**, holds $POP buyback budget, performs V4 unlock-callback swaps; keeper is timing-only, output pinned to `0xdead` |
 | `libraries/PopCurveMath.sol` | ~60 | **Critical**: pricing |
 | `libraries/PopGraduationMath.sol` | ~40 | High, seed price |
 | `adapters/PonsV1QuoteAdapter.sol` | ~90 | High, graduation proof + TWAP |

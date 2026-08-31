@@ -75,7 +75,10 @@ forge script script/Deploy.s.sol --rpc-url $RPC --broadcast -i 1 --sender 0x<dep
 What the script does, in order: deploys the 48h `TimelockController` when
 `USE_TIMELOCK` is left on (`PROTOCOL_OWNER` as sole proposer+executor,
 self-administered) and skips it otherwise, `PopFeeEscrow`
-(ownerless), `PopLocker`, mines and CREATE2-deploys `PopHook` at an
+(ownerless), then the revenue periphery: `PopRevenueSplitter` (protocol fee
+recipient from genesis; 15% of PONS revenue to $POP holders, owner-adjustable)
+and `PopBuybackBurner` (future $POP creator-fee recipient; 25% of its intake
+burns $POP, immutable; `PROTOCOL_OWNER` starts as keeper). Then `PopLocker`, mines and CREATE2-deploys `PopHook` at an
 address carrying its permission bits, deploys the `PonsV1QuoteAdapter` +
 `PopQuoteRegistry`, the factory + executor + deployer, wires everything,
 adds launch config 0 (1B supply / 1% fee / tick spacing 200), **lists
@@ -131,6 +134,24 @@ schedule(factory, 0, setLaunchEnabled(true), 0x0, 0x0, 172800)  → execute
 (Optionally whitelist a few creators immediately via
 `setWhitelistedLauncher` for a soft-launch during the notice window,
 also timelocked.)
+
+## Step 3.5, the $POP token itself
+
+$POP launches through the ordinary create flow, during the whitelist window,
+with three parameters that wire the revenue machinery:
+
+1. Cashback mode **Holder rewards** with share **0%**: deploys the
+   reward-token variant (the machinery the splitter pays into) while pledging
+   nothing from the creator side.
+2. Creator fee **2%**, and **creator fee recipient = the buyback burner**
+   (address in `deployments/4663.json`). Both freeze at launch.
+3. After the launch lands: `splitter.setPopToken(<POP address>)` (once).
+   After $POP graduates: `burner.setPool(<POP pool key>)` (once), and point
+   the keeper at the ops bot when it is running.
+
+Resulting economics per $100 of $POP volume: $2.30 owner, $0.625 burned,
+$0.075 to holders. Per $100 of any other token's volume: $0.425 owner,
+$0.075 to $POP holders, the rest per that creator's terms.
 
 ## Step 4, services
 

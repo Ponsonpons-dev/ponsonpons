@@ -9,7 +9,10 @@ import {HookMiner} from "@uniswap/v4-periphery/test/shared/HookMiner.sol";
 import {Script, console} from "forge-std/Script.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {RobinhoodChainAddresses as A} from "../src/Addresses.sol";
+import {PopBuybackBurner} from "../src/PopBuybackBurner.sol";
 import {PopFeeEscrow} from "../src/PopFeeEscrow.sol";
 import {PopGraduationExecutor} from "../src/PopGraduationExecutor.sol";
 import {PopHook} from "../src/PopHook.sol";
@@ -17,6 +20,7 @@ import {PopLaunchDeployer} from "../src/PopLaunchDeployer.sol";
 import {PopLaunchFactory} from "../src/PopLaunchFactory.sol";
 import {PopLocker} from "../src/PopLocker.sol";
 import {PopQuoteRegistry} from "../src/PopQuoteRegistry.sol";
+import {PopRevenueSplitter} from "../src/PopRevenueSplitter.sol";
 import {PopRewardTokenDeployer} from "../src/PopRewardTokenDeployer.sol";
 import {IPonsV1LaunchFactory, IUniswapV3FactoryLike, PonsV1QuoteAdapter} from "../src/adapters/PonsV1QuoteAdapter.sol";
 import {IPopFeeEscrow, IPopQuoteRegistry} from "../src/interfaces/IPop.sol";
@@ -64,10 +68,16 @@ contract Deploy is Script {
     uint256 internal constant CURVE_FEE_BPS = 100; // 1%
     uint256 internal constant LAUNCH_SUPPLY = 1_000_000_000 ether;
     int24 internal constant TICK_SPACING = 200;
+    // 15% of protocol revenue to $POP holders; owner-adjustable afterwards.
+    uint16 internal constant HOLDER_SHARE_BPS = 1_500;
+    // 25% of $POP's creator fees buy and burn $POP; immutable.
+    uint16 internal constant BURN_SHARE_BPS = 2_500;
 
     /// @dev Held here rather than in run()'s frame, which is at the stack
     /// limit even with via_ir. Zero means ownership is direct, no timelock.
     address private _timelock;
+    PopRevenueSplitter private _splitter;
+    PopBuybackBurner private _burner;
 
     function run() external {
         require(block.chainid == A.CHAIN_ID, "wrong chain");
@@ -85,8 +95,12 @@ contract Deploy is Script {
         //    limit even with via_ir.
         address governor = _governance(protocolOwner, useTimelock);
 
-        // 2. Ownerless plumbing.
+        // 2. Ownerless plumbing, then the revenue periphery. The splitter must
+        //    exist before the hook is mined: it is the protocol fee recipient
+        //    every launch snapshots, so wiring it from genesis means no launch
+        //    can ever predate the holder revenue share.
         PopFeeEscrow escrow = new PopFeeEscrow();
+        _revenue(protocolOwner, escrow);
 
         // 3. Locker (owner = deployer for wiring, then timelock).
         PopLocker locker = new PopLocker(deployer, A.UNISWAP_V4_POSITION_MANAGER);
@@ -97,7 +111,7 @@ contract Deploy is Script {
         bytes memory hookArgs = abi.encode(
             IPoolManager(A.UNISWAP_V4_POOL_MANAGER),
             IPopFeeEscrow(address(escrow)),
-            protocolOwner,
+            address(_splitter),
             deployer,
             uint256(PROTOCOL_FEE_SHARE_BPS),
             HOOK_FEE_BPS,
@@ -108,7 +122,7 @@ contract Deploy is Script {
         PopHook hook = new PopHook{salt: hookSalt}(
             IPoolManager(A.UNISWAP_V4_POOL_MANAGER),
             IPopFeeEscrow(address(escrow)),
-            protocolOwner,
+            address(_splitter),
             deployer,
             uint256(PROTOCOL_FEE_SHARE_BPS),
             HOOK_FEE_BPS,
@@ -188,6 +202,8 @@ contract Deploy is Script {
         vm.serializeAddress(json, "graduationExecutor", address(executor));
         vm.serializeAddress(json, "launchDeployer", address(launchDeployer));
         vm.serializeAddress(json, "rewardTokenDeployer", address(rewardTokenDeployer));
+        vm.serializeAddress(json, "revenueSplitter", address(_splitter));
+        vm.serializeAddress(json, "buybackBurner", address(_burner));
         vm.serializeAddress(json, "graduationGuard", address(factory.graduationGuard()));
         vm.serializeAddress(json, "poolManager", A.UNISWAP_V4_POOL_MANAGER);
         vm.serializeAddress(json, "positionManager", A.UNISWAP_V4_POSITION_MANAGER);
@@ -196,6 +212,9 @@ contract Deploy is Script {
 
         console.log("POP deployed. Factory:", address(factory));
         console.log("Pending owner of all four (must acceptOwnership):", governor);
+        console.log("Protocol fees flow to the revenue splitter:", address(_splitter));
+        console.log("At $POP's launch: set creatorFeeRecipient to the burner:", address(_burner));
+        console.log("After $POP launches: splitter.setPopToken; after it graduates: burner.setPool.");
         if (!useTimelock) {
             console.log("NOTE: deployed WITHOUT a timelock. Owner changes take effect immediately.");
             console.log("Set NEXT_PUBLIC_GOVERNANCE=direct on the frontend so the site does not claim otherwise.");
@@ -207,6 +226,25 @@ contract Deploy is Script {
      * returns `owner` itself when USE_TIMELOCK=false. A zero timelock address
      * in the deployment record means ownership is direct.
      */
+    /**
+     * @dev Deploys the revenue periphery into contract state (run()'s frame
+     * is at the stack limit): the splitter that shares protocol revenue with
+     * $POP holders (15% initial, owner-adjustable), and the buyback burner
+     * that turns 25% of $POP's creator fees into burned $POP (immutable).
+     * The owner starts as the burner's keeper and can hand that to a bot.
+     */
+    function _revenue(address owner, PopFeeEscrow escrow) private {
+        _splitter = new PopRevenueSplitter(owner, IPopFeeEscrow(address(escrow)), IERC20(A.PONS), HOLDER_SHARE_BPS);
+        _burner = new PopBuybackBurner(
+            owner,
+            IPoolManager(A.UNISWAP_V4_POOL_MANAGER),
+            IPopFeeEscrow(address(escrow)),
+            IERC20(A.PONS),
+            owner,
+            BURN_SHARE_BPS
+        );
+    }
+
     function _governance(address owner, bool useTimelock) private returns (address governor) {
         if (!useTimelock) return owner;
         address[] memory proposers = new address[](1);

@@ -71,6 +71,13 @@ export default function TrustDoc() {
           complete the graduation. The owner chooses <em>when</em>, never <em>where</em>.
         </li>
         <li>Rotate the fee-sweep operator, which can only trigger fee conversions with a price floor.</li>
+        <li>
+          <strong>Adjust the $POP holder revenue share</strong> on the protocol&apos;s splitter, in
+          either direction (it starts at 15% and <em>can be adjusted later on</em>). The owner can also
+          point the splitter at the $POP token once, and choose the buyback burner&apos;s keeper. What
+          the owner cannot do: claw back a distribution that already happened, or change the
+          burner&apos;s 25% burn ratio, which is immutable.
+        </li>
       </ul>
       <p>That is the whole surface. Anything not on that list does not exist in the code.</p>
 

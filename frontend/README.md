@@ -24,7 +24,7 @@ lightweight-charts, dark theme by default, mobile-first.
 ## Deploying
 
 The Vercel project is linked to this repository with **root directory
-`ponsonpons/frontend`**; every push builds. Production tracks `main`, other branches get
+`frontend`**; every push builds. Production tracks `main`, other branches get
 preview URLs.
 
 Set these in Project → Settings → Environment Variables. The site builds and
@@ -36,6 +36,7 @@ will be functional until they point at a real deployment:
 | --- | --- |
 | `NEXT_PUBLIC_INDEXER_URL` | Public URL of the Phase 2 Ponder app. Without it the site falls back to `localhost` and every list is empty. |
 | `NEXT_PUBLIC_LAUNCH_FACTORY` … `NEXT_PUBLIC_PROTOCOL_OWNER` | From `contracts/deployments/4663.json` once the stack is actually deployed. |
+| `NEXT_PUBLIC_REVENUE_SPLITTER` / `NEXT_PUBLIC_BUYBACK_BURNER` | Revenue periphery from the same deployments file; the proof page links them. |
 | `NEXT_PUBLIC_GOVERNANCE` | `timelock` or `direct`, matching how the stack was deployed. Drives what `/docs/proof` claims. |
 | `NEXT_PUBLIC_WALLETCONNECT_ID` | WalletConnect Cloud project id. Injected wallets work without it; WalletConnect does not. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical origin, used for OG/Twitter card URLs. |

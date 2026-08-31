@@ -117,7 +117,21 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     a: (
       <>
         50% of the 1% base fee, which is 0.5% of each trade, plus a small flat ETH fee at launch. That share is at the hard cap coded into the hook, so it can never rise. We take
-        nothing from the creator&apos;s own fee, nothing from cashback, and nothing from liquidity.
+        nothing from the creator&apos;s own fee, nothing from cashback, and nothing from liquidity. And
+        15% of our share is routed on-chain to $POP holders (see the next question).
+      </>
+    ),
+  },
+  {
+    q: "Why hold $POP?",
+    a: (
+      <>
+        Because it is a share of the whole platform&apos;s fee stream. The protocol&apos;s cut of every
+        trade on every token accrues to an on-chain splitter, and 15% of it is distributed to $POP
+        holders in $PONS, pro-rata, automatically, with no staking. On top of that, 25% of $POP&apos;s
+        own creator fees buy $POP on its pool and burn it, a ratio that is immutable in the
+        burner&apos;s bytecode. Disclosure: the 15% holder share can be adjusted later on by the
+        protocol owner; the 25% burn cannot.
       </>
     ),
   },
