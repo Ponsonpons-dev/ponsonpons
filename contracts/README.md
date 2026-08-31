@@ -14,11 +14,11 @@ the full Phase 0 discovery and design rationale.
 |---|---|
 | `PopQuoteRegistry` | Permissionless, rule-based quote-token allowlist: on-chain graduation proof via origin adapters + a locked-ETH-liquidity floor enforced live at every launch. TWAP-derived curve economics per quote, with rate-limited, clamped, permissionless re-pegs. No delist function exists. |
 | `adapters/PonsV1QuoteAdapter` | Proves a token graduated on Pons v1 and reads its locked WETH principal + V3 TWAP. Stateless, ownerless. |
-| `PopLaunchFactory` | Deploys curve+token per launch (CREATE2, vanity-minable), snapshots all economics, orchestrates two-phase permissionless graduation. Owner (48h timelock) configures **future launches only**; rescue paths are time-delayed and fixed-recipient. |
+| `PopLaunchFactory` | Deploys curve+token per launch (CREATE2, vanity-minable), snapshots all economics, orchestrates two-phase permissionless graduation. Owner configures **future launches only**; rescue paths are time-delayed and fixed-recipient. |
 | `PopBondingCurve` | Virtual-reserve constant-product curve, ERC-20 quote, quote-denominated fees, decaying snipe tax, partial final fill, donation-proof tracked reserves. Fee sweep is fully permissionless (no swaps: burn is a transfer, rebate is instant). |
 | `PopLaunchToken` | Plain fixed-supply ERC-20. No owner, no mint, no hooks, nothing. |
 | `PopRewardToken` | The HolderRewards variant: same fixed supply, plus a cumulative-accumulator distributor that pays quote to holders. Permissionless `sync()`, immutable exclusion set, pull-payment `claim()`. |
-| `PopHook` | Shared V4 hook: afterSwap fee on the unspecified leg, split identically to the curve. Fee policy is **constructor-immutable**; only the recipient/operator rotate behind the timelock. |
+| `PopHook` | Shared V4 hook: afterSwap fee on the unspecified leg, split identically to the curve. Fee policy is **constructor-immutable**; only the recipient/operator rotate, and only by the owner. |
 | `PopGraduationGuard` / `PopGraduationExecutor` / `PopLaunchDeployer` | Seed preflight, Permit2+PositionManager mint encoding, CREATE2 deployment, split out for EIP-170 headroom, mirroring the reference architecture. |
 | `PopLocker` | Holds every graduated LP NFT and the virtual-reserve supply excess forever. No withdraw, no transfer, no arbitrary call. |
 | `PopFeeEscrow` | Pull-payment ledger for all revenue (protocol, creator, trader rebates). Ownerless. |
@@ -89,13 +89,15 @@ wants a local forwarding proxy.
 ## Deploy
 
 ```bash
-PROTOCOL_MULTISIG=0x... forge script script/Deploy.s.sol \
+PROTOCOL_OWNER=0x... forge script script/Deploy.s.sol \
   --rpc-url $ROBINHOOD_RPC_URL --broadcast --verify --verifier sourcify
 ```
 
 Deploys the stack, mines the hook address, wires everything, lists $PONS,
 writes `deployments/4663.json`, and two-step-transfers ownership of
-factory/hook/locker/registry to a fresh 48h `TimelockController` (multisig
-as proposer+executor). **The multisig must then execute the four
-`acceptOwnership()` calls through the timelock**; the `/proof` page links
+factory/hook/locker/registry to a fresh 48h `TimelockController`
+(`PROTOCOL_OWNER` as proposer+executor), or straight to `PROTOCOL_OWNER`
+when run with `USE_TIMELOCK=false`. **The new owner must then execute the
+four `acceptOwnership()` calls** (through the timelock, if there is one);
+the `/proof` page links
 those transactions.

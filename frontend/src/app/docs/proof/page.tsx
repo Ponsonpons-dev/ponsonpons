@@ -2,7 +2,7 @@
 
 import { Check } from "@/components/icons";
 import { AddressLink } from "@/components/ui";
-import { ADDRESSES } from "@/lib/addresses";
+import { ADDRESSES, GOVERNANCE } from "@/lib/addresses";
 
 const CONTRACTS: Array<{ name: string; address: `0x${string}`; note: string }> = [
   { name: "PopLaunchFactory", address: ADDRESSES.launchFactory, note: "launch + graduation orchestration" },
@@ -10,15 +10,29 @@ const CONTRACTS: Array<{ name: string; address: `0x${string}`; note: string }> =
   { name: "PopHook", address: ADDRESSES.hook, note: "V4 fee hook; policy immutable in bytecode" },
   { name: "PopLocker", address: ADDRESSES.locker, note: "holds every LP NFT forever; no withdraw function" },
   { name: "PopFeeEscrow", address: ADDRESSES.feeEscrow, note: "pull-payment revenue ledger; no owner" },
-  { name: "Timelock (48h)", address: ADDRESSES.timelock, note: "owner of factory/hook/registry/locker" },
-  { name: "Protocol multisig", address: ADDRESSES.multisig, note: "proposer + executor on the timelock" },
+  ...(GOVERNANCE === "timelock"
+    ? ([
+        { name: "Timelock (48h)", address: ADDRESSES.timelock, note: "owner of factory/hook/registry/locker" },
+        {
+          name: "Protocol owner",
+          address: ADDRESSES.protocolOwner,
+          note: "proposer + executor on the timelock; receives protocol fees",
+        },
+      ] as const)
+    : ([
+        {
+          name: "Protocol owner",
+          address: ADDRESSES.protocolOwner,
+          note: "owns factory/hook/registry/locker directly; receives protocol fees",
+        },
+      ] as const)),
   { name: "Uniswap V4 PoolManager (canonical)", address: ADDRESSES.poolManager, note: "not ours, Uniswap's" },
   { name: "Uniswap V4 PositionManager (canonical)", address: ADDRESSES.positionManager, note: "not ours, Uniswap's" },
 ];
 
 const CLAIMS: Array<{ claim: string; how: string }> = [
   {
-    claim: "Nobody can touch locked liquidity. Not us, not the timelock, not anyone.",
+    claim: "Nobody can touch locked liquidity. Not us, not the owner, not anyone.",
     how: "PopLocker has no withdraw, transfer, or arbitrary-call function. Read the verified source. Every graduated position NFT is minted directly to it.",
   },
   {
@@ -27,7 +41,7 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
   },
   {
     claim: "Fee terms can never change on a live launch.",
-    how: "Every launch snapshots its economics at creation; the hook's fee policy is a constructor immutable. The registry's re-pegs and the timelock's config changes apply to future launches only.",
+    how: "Every launch snapshots its economics at creation; the hook's fee policy is a constructor immutable. The registry's re-pegs and the owner's config changes apply to future launches only, never to a launch already live.",
   },
   {
     claim: "The quote allowlist is rules, not opinions.",
@@ -43,7 +57,11 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
   },
   {
     claim: "The only owner powers are config-for-future-launches and constrained rescues.",
-    how: "Everything is owned by a 48h timelock. The two rescue paths (for quote tokens that turn hostile after listing) pay only fixed recipients, the launch's own creator and the protocol treasury. The reserve rescue unlocks only after 14 days during which anyone can still complete the graduation permissionlessly.",
+    how:
+      (GOVERNANCE === "timelock"
+        ? "Everything is owned by a 48h timelock, so any change is visible on-chain for two days before it can take effect. "
+        : "The four ownable contracts are owned directly by the protocol owner, a single key, and its changes take effect immediately with no delay. That is the weakest part of this deployment and we would rather say so than imply a timelock we did not deploy. ") +
+      "What that owner can reach is narrow and worth reading literally: launch configs and the snipe-tax window for FUTURE launches, and two rescue paths for quote tokens that turn hostile after listing. Those rescues pay only fixed recipients, the launch's own creator and the protocol treasury, so there is no address the owner can name. The reserve rescue unlocks only after 14 days, during which anyone can still complete the graduation permissionlessly. It cannot touch locked liquidity, cannot redirect a creator's fees, and cannot change the terms of a launch that already exists.",
   },
   {
     claim: "No proxies. No upgrades. Anywhere.",

@@ -6,11 +6,33 @@ governance handover and a complete launch lifecycle against real $PONS and
 the real canonical Uniswap V4 PoolManager. The fork transcript's key
 results are recorded at the bottom.
 
+## Choose a governance model first
+
+The script supports two, and the choice changes what the site is allowed to
+claim. Set `NEXT_PUBLIC_GOVERNANCE` on the frontend to match, or /proof and
+the trust docs will describe a deployment that does not exist.
+
+| | `USE_TIMELOCK=true` (default) | `USE_TIMELOCK=false` |
+| --- | --- | --- |
+| Owner of the four ownable contracts | 48h `TimelockController` | `PROTOCOL_OWNER` directly |
+| Owner changes take effect | after 48h, publicly visible first | immediately |
+| Frontend `NEXT_PUBLIC_GOVERNANCE` | `timelock` | `direct` |
+
+Direct ownership is the weaker model and the site says so in as many words.
+It is also what pons-factory.fun runs (a single EOA owns their factory and
+locker), so it is not unusual on this chain; base Pons uses a 2-of-3 Safe
+with no timelock. Whichever you pick, the guarantees that actually matter,
+locked liquidity, frozen fee terms, no creator-fee override, permissionless
+quote listing, hold in both, because they are enforced by absent code rather
+than by governance.
+
 ## Prerequisites
 
-1. **Protocol multisig**: a Safe on Robinhood Chain (2-of-3 like Pons's,
-   or better). It becomes: timelock proposer + executor, protocol fee
-   recipient, and initial `feeSweepOperator` owner-side counterpart.
+1. **Protocol owner**: the address that receives protocol fees and owns the
+   four ownable contracts (directly, or as proposer/executor on the
+   timelock). A Safe is strongly preferred; Safe v1.4.1 is deployed on
+   Robinhood Chain (factory `0x4e1DCf7A...ec67`), so creating one is a
+   single factory call.
 2. **Deployer EOA** with ~0.02 ETH on chain 4663 (fork estimate: 0.0125
    ETH gas at 0.46 gwei).
 3. **Archive-grade RPC** (the public endpoint Cloudflare-challenges heavy
@@ -21,29 +43,51 @@ results are recorded at the bottom.
 
 ```bash
 cd contracts
-PROTOCOL_MULTISIG=0x<safe> forge script script/Deploy.s.sol \
+
+# With the 48h timelock (default):
+PROTOCOL_OWNER=0x<safe> forge script script/Deploy.s.sol \
+  --rpc-url $RPC --broadcast --private-key $DEPLOYER_KEY \
+  --verify --verifier sourcify
+
+# Or owned directly, no timelock:
+PROTOCOL_OWNER=0x<addr> USE_TIMELOCK=false forge script script/Deploy.s.sol \
   --rpc-url $RPC --broadcast --private-key $DEPLOYER_KEY \
   --verify --verifier sourcify
 ```
 
-What the script does, in order: deploys the 48h `TimelockController`
-(multisig as sole proposer+executor, self-administered), `PopFeeEscrow`
+What the script does, in order: deploys the 48h `TimelockController` when
+`USE_TIMELOCK` is left on (`PROTOCOL_OWNER` as sole proposer+executor,
+self-administered) and skips it otherwise, `PopFeeEscrow`
 (ownerless), `PopLocker`, mines and CREATE2-deploys `PopHook` at an
 address carrying its permission bits, deploys the `PonsV1QuoteAdapter` +
 `PopQuoteRegistry`, the factory + executor + deployer, wires everything,
 adds launch config 0 (1B supply / 1% fee / tick spacing 200), **lists
 $PONS** through the permissionless path, transfers ownership of
-factory/hook/locker/registry to the timelock (two-step), and writes
-`deployments/4663.json`.
+factory/hook/locker/registry to the timelock, or straight to
+`PROTOCOL_OWNER` (two-step either way), and writes `deployments/4663.json`.
+That file records `governance` as `timelock` or `direct`, and a zero
+`timelock` address means ownership is direct.
 
 Note: the factory deploys with `launchEnabled = false` (whitelist-only).
 This is deliberate, see step 3.
 
-## Step 2, governance handover (multisig, through the timelock)
+## Step 2, governance handover
 
-The four `acceptOwnership()` calls must be **executed by the timelock**,
-which means: multisig schedules, waits 48h, multisig executes. For each of
-factory, hook, locker, registry (addresses from `deployments/4663.json`):
+Ownership transfer is two-step in both models: the new owner must call
+`acceptOwnership()` on factory, hook, locker and registry. **The deployment
+is not finished until all four land.**
+
+Without a timelock, that is four direct calls from `PROTOCOL_OWNER`:
+
+```bash
+for c in $FACTORY $HOOK $LOCKER $REGISTRY; do
+  cast send $c "acceptOwnership()" --rpc-url $RPC --private-key $OWNER_KEY
+done
+```
+
+With a timelock, the calls must be **executed by the timelock**, which
+means: schedule, wait 48h, execute. For each of factory, hook, locker,
+registry (addresses from `deployments/4663.json`):
 
 ```
 schedule(target, 0, 0x79ba5097 /* acceptOwnership() */, 0x0, 0x0, 172800)

@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { GOVERNANCE } from "@/lib/addresses";
+
 export default function TrustDoc() {
   return (
     <>
@@ -39,10 +41,19 @@ export default function TrustDoc() {
       </ul>
 
       <h2>What the protocol owner can do</h2>
-      <p>
-        Ownership sits behind a <strong>48-hour timelock</strong> held by a multisig, so every action is
-        publicly visible for two days before it can execute. The complete list:
-      </p>
+      {GOVERNANCE === "timelock" ? (
+        <p>
+          Ownership sits behind a <strong>48-hour timelock</strong>, so every action is publicly visible
+          for two days before it can execute. The complete list:
+        </p>
+      ) : (
+        <p>
+          Ownership is held <strong>directly by a single key</strong>, with no timelock, so the actions
+          below take effect the moment they are sent. We are telling you this plainly because it is the
+          weakest part of the deployment, and because the list itself is short by construction rather
+          than by promise. The complete list:
+        </p>
+      )}
       <ul>
         <li>Configure terms for <em>future</em> launches (fee recipient, launch fee, curve config).</li>
         <li>

@@ -45,8 +45,10 @@ committed RPC cache, so it reproduces byte-identically with no archive
 provider. **An external audit has not yet been done.** Treat the contracts as
 unaudited until `docs/AUDIT.md` links a report.
 
-Not yet deployed to mainnet. `docs/DEPLOYMENT.md` is the runbook; it needs a
-protocol multisig before the ownership handover can complete.
+Not yet deployed to mainnet. `docs/DEPLOYMENT.md` is the runbook. Governance
+is chosen at deploy time: a 48h timelock (default) or direct ownership by a
+single protocol owner. The site reads which one shipped and describes it
+rather than assuming, so pick deliberately.
 
 ## Quick start
 

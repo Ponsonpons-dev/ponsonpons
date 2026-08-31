@@ -55,7 +55,7 @@ const GUARANTEES = [
   },
   {
     title: "Fee terms frozen at launch",
-    body: "Nobody can change a live launch's fees, threshold or cashback afterwards. Not the creator, not the protocol, not the timelock.",
+    body: "Nobody can change a live launch's fees, threshold or cashback afterwards. Not the creator, not the protocol, not the owner. The terms are snapshotted into the contract at creation.",
   },
   {
     title: "No admin over your revenue",

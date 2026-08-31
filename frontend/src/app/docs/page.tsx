@@ -57,8 +57,8 @@ export default function DocsIndex() {
           afterwards.
         </li>
         <li>
-          Nobody can redirect a creator&apos;s revenue. There is no admin override, not even a
-          timelocked one.
+          Nobody can redirect a creator&apos;s revenue. There is no admin override anywhere in the
+          code, so this holds regardless of who owns the contracts.
         </li>
         <li>Launch tokens have no owner, no mint function, no blacklist, and no pause.</li>
         <li>

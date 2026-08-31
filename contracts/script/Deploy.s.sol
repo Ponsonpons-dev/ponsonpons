@@ -26,18 +26,30 @@ import {IPopFeeEscrow, IPopQuoteRegistry} from "../src/interfaces/IPop.sol";
  * addresses to deployments/<chainId>.json.
  *
  * Required env:
- *   PROTOCOL_MULTISIG , Safe that proposes/executes on the 48h timelock and
- *                        receives protocol fees.
+ *   PROTOCOL_OWNER    , receives protocol fees, and owns the four ownable
+ *                        contracts (directly, or via the timelock).
  * Optional env (defaults shown):
+ *   USE_TIMELOCK=true                 (false deploys without a timelock)
  *   LAUNCH_FEE_WEI=500000000000000    (0.0005 ETH)
  *   MIN_ETH_TVL_WEI=25e18
  *   GRADUATION_TARGET_ETH_WEI=4.2e18
  *
- * Ownership: every contract deploys owned by the broadcaster for one-time
- * wiring, then two-step-transfers to the timelock. The multisig must execute
- * `acceptOwnership()` on factory/hook/locker/registry THROUGH THE TIMELOCK
- * to complete the handover. the deployment is not done until the accepts
- * land, and the /proof page should link all four accept transactions.
+ * Ownership, two supported models. Both are honest; pick one and make sure
+ * the site says which:
+ *
+ *   USE_TIMELOCK=true  (default) , a 48h TimelockController owns the four
+ *     ownable contracts and PROTOCOL_OWNER proposes and executes on it.
+ *     Every parameter change is visible on-chain 48h before it can land.
+ *     PROTOCOL_OWNER must execute `acceptOwnership()` on factory, hook,
+ *     locker and registry THROUGH THE TIMELOCK to finish the handover.
+ *
+ *   USE_TIMELOCK=false , PROTOCOL_OWNER owns the four contracts directly and
+ *     its changes take effect immediately, with no delay and no warning.
+ *     It must still call `acceptOwnership()` on all four. Anything the site
+ *     claims about a timelock becomes false under this model.
+ *
+ * Either way the deployment is not done until the four accepts land, and the
+ * proof page should link all four transactions.
  *
  * Verification: run with `--verify --verifier sourcify` (Sourcify supports
  * chain 4663; the Blockscout UI imports from it).
@@ -53,9 +65,14 @@ contract Deploy is Script {
     uint256 internal constant LAUNCH_SUPPLY = 1_000_000_000 ether;
     int24 internal constant TICK_SPACING = 200;
 
+    /// @dev Held here rather than in run()'s frame, which is at the stack
+    /// limit even with via_ir. Zero means ownership is direct, no timelock.
+    address private _timelock;
+
     function run() external {
         require(block.chainid == A.CHAIN_ID, "wrong chain");
-        address multisig = vm.envAddress("PROTOCOL_MULTISIG");
+        address protocolOwner = vm.envAddress("PROTOCOL_OWNER");
+        bool useTimelock = vm.envOr("USE_TIMELOCK", true);
         uint256 launchFee = vm.envOr("LAUNCH_FEE_WEI", uint256(0.0005 ether));
         uint256 minEthTvl = vm.envOr("MIN_ETH_TVL_WEI", uint256(25 ether));
         uint256 targetEth = vm.envOr("GRADUATION_TARGET_ETH_WEI", uint256(4.2 ether));
@@ -63,11 +80,10 @@ contract Deploy is Script {
         vm.startBroadcast();
         address deployer = msg.sender;
 
-        // 1. Governance: 48h timelock, multisig proposes and executes, no
-        //    separate admin (the timelock self-administers).
-        address[] memory proposers = new address[](1);
-        proposers[0] = multisig;
-        TimelockController timelock = new TimelockController(TIMELOCK_DELAY, proposers, proposers, address(0));
+        // 1. Governance. Built in a helper so its locals do not sit in this
+        //    frame for the rest of the script; run() is already at the stack
+        //    limit even with via_ir.
+        address governor = _governance(protocolOwner, useTimelock);
 
         // 2. Ownerless plumbing.
         PopFeeEscrow escrow = new PopFeeEscrow();
@@ -81,7 +97,7 @@ contract Deploy is Script {
         bytes memory hookArgs = abi.encode(
             IPoolManager(A.UNISWAP_V4_POOL_MANAGER),
             IPopFeeEscrow(address(escrow)),
-            multisig,
+            protocolOwner,
             deployer,
             uint256(PROTOCOL_FEE_SHARE_BPS),
             HOOK_FEE_BPS,
@@ -92,7 +108,7 @@ contract Deploy is Script {
         PopHook hook = new PopHook{salt: hookSalt}(
             IPoolManager(A.UNISWAP_V4_POOL_MANAGER),
             IPopFeeEscrow(address(escrow)),
-            multisig,
+            protocolOwner,
             deployer,
             uint256(PROTOCOL_FEE_SHARE_BPS),
             HOOK_FEE_BPS,
@@ -145,19 +161,24 @@ contract Deploy is Script {
         //    convenience; anyone could.
         registry.listQuote(A.PONS, 0);
 
-        // 9. Hand governance to the timelock (two-step: the multisig must
-        //    execute acceptOwnership through the timelock to finish).
-        factory.transferOwnership(address(timelock));
-        hook.transferOwnership(address(timelock));
-        locker.transferOwnership(address(timelock));
-        registry.transferOwnership(address(timelock));
+        // 9. Hand governance over (two-step: the new owner must call
+        //    acceptOwnership on all four to finish, through the timelock if
+        //    one was deployed).
+        factory.transferOwnership(governor);
+        hook.transferOwnership(governor);
+        locker.transferOwnership(governor);
+        registry.transferOwnership(governor);
 
         vm.stopBroadcast();
 
         // 10. Record the deployment.
         string memory json = "deployment";
-        vm.serializeAddress(json, "timelock", address(timelock));
-        vm.serializeAddress(json, "multisig", multisig);
+        // Recorded so the site can describe the governance that actually
+        // shipped rather than the one it was designed for. A zero timelock
+        // means ownership is direct.
+        vm.serializeAddress(json, "timelock", _timelock);
+        vm.serializeAddress(json, "protocolOwner", protocolOwner);
+        vm.serializeString(json, "governance", useTimelock ? "timelock" : "direct");
         vm.serializeAddress(json, "feeEscrow", address(escrow));
         vm.serializeAddress(json, "locker", address(locker));
         vm.serializeAddress(json, "hook", address(hook));
@@ -174,6 +195,23 @@ contract Deploy is Script {
         vm.writeJson(out, string.concat("deployments/", vm.toString(block.chainid), ".json"));
 
         console.log("POP deployed. Factory:", address(factory));
-        console.log("Timelock (pending owner of all four):", address(timelock));
+        console.log("Pending owner of all four (must acceptOwnership):", governor);
+        if (!useTimelock) {
+            console.log("NOTE: deployed WITHOUT a timelock. Owner changes take effect immediately.");
+            console.log("Set NEXT_PUBLIC_GOVERNANCE=direct on the frontend so the site does not claim otherwise.");
+        }
+    }
+
+    /**
+     * @dev Deploys the 48h timelock and returns it as the governor, or
+     * returns `owner` itself when USE_TIMELOCK=false. A zero timelock address
+     * in the deployment record means ownership is direct.
+     */
+    function _governance(address owner, bool useTimelock) private returns (address governor) {
+        if (!useTimelock) return owner;
+        address[] memory proposers = new address[](1);
+        proposers[0] = owner;
+        _timelock = address(new TimelockController(TIMELOCK_DELAY, proposers, proposers, address(0)));
+        return _timelock;
     }
 }

@@ -103,7 +103,9 @@ operator at all.
 6. **Supply that misses the pool never circulates**: the virtual-reserve
    remainder and post-mint dust both route to the locker.
 7. **Frozen terms**: a live launch's fee split, thresholds, and pool
-   parameters cannot be changed by anyone, including the timelock.
+   parameters cannot be changed by anyone, including the owner. This is
+   structural, not governance: the terms are snapshotted into the launch at
+   creation and the hook's fee policy is a constructor immutable.
 8. **Fee conservation**: protocol + creator + cashback equals fees charged,
    to within integer rounding.
 9. **Reward-pot solvency** (HolderRewards), the sum of every holder's
@@ -132,7 +134,7 @@ These are the deliberate departures:
 | 10 | **Creator fee capped at 2%** (reference: 10%). | Trader-friendlier positioning. | None. |
 | 11 | **ERC-20 quotes only**: no native-ETH launch mode. | Every branch handling `address(0)` as a currency is deleted. | None; reduces surface. |
 | 12 | **`deadline` on `buy`/`sell`.** | The reference has none. | None. |
-| 13 | **Ownership is a 48h `TimelockController`** held by a multisig, applied at deploy. | The reference is owned by a 2-of-3 Safe with no timelock. | None. |
+| 13 | **Ownership is deploy-time selectable**: a 48h `TimelockController` (default) or the protocol owner directly (`USE_TIMELOCK=false`). | The reference is owned by a 2-of-3 Safe with no timelock. pons-factory.fun, which runs the same quote-token model, is owned by a single EOA. | Under `direct`, owner actions land immediately with no public notice window. The frontend reads the deployed model from `NEXT_PUBLIC_GOVERNANCE` and states it explicitly rather than claiming a timelock. |
 
 ---
 
@@ -240,7 +242,30 @@ regenerates the fixture against a live endpoint if you want to re-pin.
 ## 8. Deployment and governance
 
 See `docs/DEPLOYMENT.md`: the full runbook, executed end-to-end on a
-mainnet fork including the timelock handover. Reviewers should note that
-the deployment is **not complete** until the multisig has executed
-`acceptOwnership()` on the factory, hook, locker, and registry *through the
-timelock*; until then the deployer EOA retains ownership.
+mainnet fork including the timelock handover.
+
+**Governance is chosen at deploy time**, and reviewers should confirm which
+model a given deployment actually used rather than assuming:
+
+- `USE_TIMELOCK=true` (default): a 48h `TimelockController` owns the four
+  ownable contracts, with `PROTOCOL_OWNER` as sole proposer and executor.
+- `USE_TIMELOCK=false`: `PROTOCOL_OWNER` owns them directly and its changes
+  take effect immediately, with no notice window.
+
+`deployments/<chainId>.json` records this as `governance: "timelock" |
+"direct"`; a zero `timelock` address means direct ownership. The frontend
+reads the same fact from `NEXT_PUBLIC_GOVERNANCE` so `/docs/proof` describes
+the deployment that exists.
+
+In both models the deployment is **not complete** until `acceptOwnership()`
+has landed on the factory, hook, locker, and registry; until then the
+deployer EOA retains ownership. Under the timelock model those four calls
+must be executed *through* it.
+
+Worth stating for a reviewer weighing the direct model: the guarantees this
+protocol actually rests on do not depend on governance at all. Locked
+liquidity, frozen launch terms, the absent creator-fee override, and
+permissionless quote listing with no delist function are enforced by code
+that does not exist, not by an owner choosing not to call it. What direct
+ownership costs is the notice period on the narrow set of
+config-for-future-launches and constrained-rescue powers in §7.

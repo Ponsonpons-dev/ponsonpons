@@ -231,6 +231,13 @@ restrictions unnecessary). This matches the brief's `LaunchToken` almost exactly
 
 ## 5. Admin power inventory (what we must NOT copy, or must timelock)
 
+> **Status note.** This section records the Phase 0 design intent. As shipped,
+> the timelock is a deploy-time option (`USE_TIMELOCK`, default on) rather
+> than a guarantee. Where this document says a power sits "behind the 48h
+> timelock", read it as "behind the timelock when deployed with one, and
+> immediate otherwise". `docs/AUDIT.md` §8 and `docs/DEPLOYMENT.md` describe
+> both models; the frontend states whichever actually shipped.
+
 Owner of everything is the same 2-of-3 Safe. Powers, classified:
 
 **A. Cannot touch user funds or liquidity (config-only, future launches only)**: acceptable,
