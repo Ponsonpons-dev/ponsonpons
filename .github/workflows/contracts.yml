@@ -1,0 +1,75 @@
+name: contracts
+
+on:
+  push:
+    paths: ["contracts/**", ".github/workflows/contracts.yml"]
+  pull_request:
+    paths: ["contracts/**", ".github/workflows/contracts.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Format check
+        run: forge fmt --check src script test
+
+      - name: Build (with sizes)
+        run: forge build --sizes
+
+      - name: Unit + invariant tests
+        run: forge test -vv
+        env:
+          FOUNDRY_PROFILE: ci
+
+      - name: Gas snapshot diff
+        run: forge snapshot --match-path "test/unit/*" --check --tolerance 5
+
+      # The fork suite replays against real Robinhood Chain state without
+      # touching the network. Foundry's RPC cache for the pinned block is
+      # committed under test/fork/cache, so seeding it into ~/.foundry is all
+      # the state the run needs; fork-cache-server.mjs serves the three
+      # handshake calls createSelectFork makes before it will read that cache.
+      # No archive provider, no secret, no rate limit, and it works on fork
+      # PRs. Regenerate with contracts/script/warm-fork-cache.sh when the fork
+      # tests change; a cache miss fails loudly and says so.
+      - name: Seed Foundry RPC cache
+        run: |
+          mkdir -p ~/.foundry/cache/rpc
+          cp -r test/fork/cache/4663 ~/.foundry/cache/rpc/
+
+      - name: Mainnet fork lifecycle (offline replay)
+        run: node script/fork-cache-server.mjs -- forge test --match-path "test/fork/*" -vv
+        env:
+          RUN_FORK_TESTS: "true"
+
+  slither:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install slither
+        run: pip install slither-analyzer
+      - name: Slither (src only, informational until triaged)
+        run: slither . --filter-paths "lib|test|script" --fail-high
+        continue-on-error: true

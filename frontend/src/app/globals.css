@@ -1,0 +1,379 @@
+@import "tailwindcss";
+
+/*
+ * $POP, "Pons on Pons".
+ *
+ * The palette is sampled from the brand mark and banner, not invented:
+ * the chrome rim of the logo is #10d827, its fill is pearl #f0f0f0, and the
+ * banner's ground runs from a hazy sage #657a56 down to forest #0a1a0e.
+ *
+ * Three rules hold the whole thing together:
+ *   1. Surfaces are glass: a bright top rim, a soft internal gradient, and
+ *      a dark base. Never a flat fill with a grey border.
+ *   2. Emerald is for value: prices, actions, live state. Not decoration.
+ *   3. Depth comes from haze and rim light, never from drop shadows.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Ground → raised. Every step keeps the forest hue. */
+  --ground-rgb: 7 14 9;
+  --surface-rgb: 12 23 16;
+  --raised-rgb: 18 32 25;
+  --hover-rgb: 22 38 28;
+  --input-rgb: 10 20 14;
+
+  /* Pearl is the glass fill and the display type. Sage is everything else. */
+  --pearl-rgb: 237 242 234;
+  --sage-rgb: 140 164 135;
+
+  /* Chrome rim light, lifted off the pearl so it never reads as grey. */
+  --rim: rgb(190 225 190 / 0.11);
+  --rim-strong: rgb(190 225 190 / 0.18);
+
+  --emerald-rgb: 20 216 44;
+  --emerald-hi-rgb: 60 235 84;
+  --emerald-ink-rgb: 3 22 8;
+
+  --gold-rgb: 217 164 65;
+  --ember-rgb: 255 107 107;
+}
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-outfit), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: rgb(7 14 9);
+  --color-surface: rgb(12 23 16);
+  --color-raised: rgb(18 32 25);
+  --color-hover: rgb(22 38 28);
+  --color-input: rgb(10 20 14);
+  --color-panel: rgb(18 32 25);
+
+  --color-ink: rgb(237 242 234);
+  --color-dim: rgb(140 164 135);
+  --color-edge: rgb(190 225 190 / 0.11);
+
+  --color-pop: rgb(20 216 44);
+  --color-pop-dim: rgb(20 216 44 / 0.45);
+
+  --color-up: rgb(20 216 44);
+  --color-down: rgb(255 107 107);
+  --color-burn: rgb(217 164 65);
+
+  --radius-field: 12px;
+  --radius-card: 16px;
+  --radius-panel: 20px;
+  --radius-section: 24px;
+}
+
+body {
+  background: rgb(var(--ground-rgb));
+  color: rgb(var(--pearl-rgb));
+  font-feature-settings: "tnum", "ss01";
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* The page sits on the banner's haze rather than flat black. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 55% at 12% -5%, rgb(122 148 104 / 0.22), transparent 60%),
+    radial-gradient(70% 50% at 88% 0%, rgb(20 216 44 / 0.07), transparent 62%),
+    linear-gradient(180deg, rgb(18 36 24 / 0.55) 0%, transparent 45%);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: rgb(var(--emerald-rgb) / 0.25);
+  color: rgb(var(--pearl-rgb));
+}
+
+@layer components {
+  /*
+   * Glass. The rim is brighter along the top edge the way the logo's chrome
+   * catches light, and the fill darkens toward the base.
+   */
+  .card {
+    position: relative;
+    border-radius: 16px;
+    border: 1px solid var(--rim);
+    background:
+      linear-gradient(
+        168deg,
+        rgb(var(--pearl-rgb) / 0.055) 0%,
+        rgb(var(--pearl-rgb) / 0.018) 38%,
+        rgb(0 0 0 / 0.16) 100%
+      ),
+      rgb(var(--surface-rgb));
+    box-shadow: inset 0 1px 0 rgb(var(--pearl-rgb) / 0.09);
+  }
+
+  .panel {
+    position: relative;
+    border-radius: 24px;
+    border: 1px solid var(--rim);
+    background:
+      linear-gradient(
+        170deg,
+        rgb(var(--pearl-rgb) / 0.04) 0%,
+        rgb(var(--pearl-rgb) / 0.012) 42%,
+        rgb(0 0 0 / 0.14) 100%
+      ),
+      rgb(var(--surface-rgb) / 0.72);
+    box-shadow: inset 0 1px 0 rgb(var(--pearl-rgb) / 0.07);
+  }
+
+  .panel .card {
+    background:
+      linear-gradient(168deg, rgb(var(--pearl-rgb) / 0.05), rgb(0 0 0 / 0.12)),
+      rgb(var(--raised-rgb) / 0.6);
+  }
+
+  .btn,
+  .btn-pop,
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0.6rem 1.25rem;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    transition:
+      background 160ms,
+      box-shadow 160ms,
+      border-color 160ms,
+      color 160ms;
+  }
+
+  .btn:disabled,
+  .btn-pop:disabled,
+  .btn-ghost:disabled {
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* The primary action is the one lit object on the page. */
+  .btn-pop {
+    background: linear-gradient(180deg, rgb(var(--emerald-hi-rgb)), rgb(var(--emerald-rgb)));
+    color: rgb(var(--emerald-ink-rgb));
+    font-weight: 700;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      0 0 24px rgb(var(--emerald-rgb) / 0.28);
+  }
+  .btn-pop:hover:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      0 0 38px rgb(var(--emerald-rgb) / 0.42);
+  }
+  .btn-pop:disabled {
+    background: rgb(var(--pearl-rgb) / 0.07);
+    color: rgb(var(--pearl-rgb) / 0.3);
+  }
+
+  .btn-ghost {
+    border: 1px solid var(--rim-strong);
+    background: rgb(var(--pearl-rgb) / 0.04);
+    color: rgb(var(--pearl-rgb) / 0.9);
+    box-shadow: inset 0 1px 0 rgb(var(--pearl-rgb) / 0.06);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgb(var(--pearl-rgb) / 0.08);
+    border-color: rgb(var(--emerald-rgb) / 0.35);
+  }
+  .btn-ghost:disabled {
+    opacity: 0.45;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 999px;
+    border: 1px solid var(--rim);
+    background: rgb(var(--pearl-rgb) / 0.045);
+    padding: 0.2rem 0.6rem;
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgb(var(--sage-rgb));
+  }
+
+  .pill-pop {
+    border-color: rgb(var(--emerald-rgb) / 0.3);
+    background: rgb(var(--emerald-rgb) / 0.08);
+    color: rgb(var(--emerald-hi-rgb));
+  }
+
+  /*
+   * Wide-tracked caps. Lifted straight off the banner's "PONS ON PONS" line,
+   * and the one recurring typographic gesture on the site.
+   */
+  .eyebrow {
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: rgb(var(--sage-rgb) / 0.75);
+  }
+
+  .input {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--rim-strong);
+    background: rgb(var(--input-rgb));
+    padding: 0.65rem 0.9rem;
+    font-size: 14px;
+    color: rgb(var(--pearl-rgb));
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.3);
+    transition: border-color 160ms, box-shadow 160ms;
+  }
+  .input::placeholder {
+    color: rgb(var(--sage-rgb) / 0.45);
+  }
+  .input:focus {
+    border-color: rgb(var(--emerald-rgb) / 0.55);
+    outline: none;
+    box-shadow:
+      inset 0 1px 2px rgb(0 0 0 / 0.3),
+      0 0 0 3px rgb(var(--emerald-rgb) / 0.12);
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgb(var(--sage-rgb) / 0.8);
+  }
+
+  /* Hairline that fades at both ends, like the banner's divider rule. */
+  .rule {
+    height: 1px;
+    border: 0;
+    background: linear-gradient(90deg, transparent, var(--rim-strong) 22%, var(--rim-strong) 78%, transparent);
+  }
+
+  input[type="range"] {
+    accent-color: rgb(var(--emerald-rgb));
+  }
+}
+
+@layer components {
+  .prose-pop h2 {
+    margin-top: 2.25rem;
+    margin-bottom: 0.75rem;
+    font-family: var(--font-display), sans-serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: rgb(var(--pearl-rgb));
+  }
+  .prose-pop h3 {
+    margin-top: 1.6rem;
+    margin-bottom: 0.5rem;
+    font-family: var(--font-display), sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .prose-pop p,
+  .prose-pop li {
+    font-size: 14.5px;
+    line-height: 1.72;
+    color: rgb(var(--sage-rgb));
+  }
+  .prose-pop p {
+    margin-bottom: 0.9rem;
+  }
+  .prose-pop ul,
+  .prose-pop ol {
+    margin-bottom: 0.9rem;
+    padding-left: 1.15rem;
+  }
+  .prose-pop ul {
+    list-style: disc;
+  }
+  .prose-pop ol {
+    list-style: decimal;
+  }
+  .prose-pop li {
+    margin-bottom: 0.35rem;
+  }
+  .prose-pop li::marker {
+    color: rgb(var(--emerald-rgb) / 0.6);
+  }
+  .prose-pop strong {
+    color: rgb(var(--pearl-rgb));
+    font-weight: 600;
+  }
+  .prose-pop a {
+    color: rgb(var(--emerald-hi-rgb));
+    text-decoration: none;
+    border-bottom: 1px solid rgb(var(--emerald-rgb) / 0.4);
+  }
+  .prose-pop a:hover {
+    border-bottom-color: rgb(var(--emerald-rgb));
+  }
+  .prose-pop code {
+    border-radius: 5px;
+    border: 1px solid var(--rim);
+    background: rgb(var(--pearl-rgb) / 0.05);
+    padding: 0.1rem 0.35rem;
+    font-size: 0.82em;
+    color: rgb(var(--pearl-rgb));
+  }
+  .prose-pop pre {
+    overflow-x: auto;
+    border-radius: 14px;
+    border: 1px solid var(--rim);
+    background: rgb(var(--input-rgb));
+    box-shadow: inset 0 1px 0 rgb(var(--pearl-rgb) / 0.05);
+    padding: 0.95rem 1.05rem;
+    font-size: 12.5px;
+    line-height: 1.66;
+    margin-bottom: 0.9rem;
+  }
+  .prose-pop pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+  .prose-pop table {
+    width: 100%;
+    margin-bottom: 1.1rem;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .prose-pop th,
+  .prose-pop td {
+    border-bottom: 1px solid var(--rim);
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .prose-pop th {
+    color: rgb(var(--sage-rgb) / 0.8);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+  }
+}

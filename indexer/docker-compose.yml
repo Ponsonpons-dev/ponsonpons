@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ponder
+      POSTGRES_PASSWORD: ponder
+      POSTGRES_DB: pop
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ponder -d pop"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://ponder:ponder@postgres:5432/pop
+    ports:
+      - "42069:42069"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

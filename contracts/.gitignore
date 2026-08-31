@@ -1,0 +1,6 @@
+# Anchored to the project root on purpose: an unanchored `cache/` also matches
+# test/fork/cache/, which holds the committed RPC cache the fork suite replays.
+/out/
+/cache/
+/broadcast/
+slither.log

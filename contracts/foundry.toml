@@ -1,0 +1,30 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 5000
+via_ir = true
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
+
+[profile.default.fuzz]
+runs = 512
+
+[profile.default.invariant]
+runs = 64
+depth = 64
+fail_on_revert = false
+
+[profile.ci.fuzz]
+runs = 2048
+
+[profile.fork]
+test = "test/fork"
+
+[fmt]
+line_length = 120
+sort_imports = true
+
+[rpc_endpoints]
+robinhood = "${ROBINHOOD_RPC_URL}"
