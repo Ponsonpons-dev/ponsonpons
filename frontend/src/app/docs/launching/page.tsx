@@ -60,6 +60,12 @@ export default function LaunchingDoc() {
 
       <h2>What happens when you sign</h2>
       <ol>
+        <li>
+          Your token&apos;s address will end in <code>909</code>: the create page mines a salt until
+          the predicted address carries the platform signature, and the prediction is confirmed by the
+          deployer contract itself before you sign. Purely cosmetic, costs a few seconds, and a launch
+          never fails because of it.
+        </li>
         <li>The launch is simulated first. If it would fail, you see why instead of losing gas.</li>
         <li>
           The exact economics you were quoted are <strong>pinned into the transaction</strong>. If

@@ -17,6 +17,18 @@ import { ImageDrop } from "@/components/ImageDrop";
 import { ADDRESSES } from "@/lib/addresses";
 import { fmtAmount } from "@/lib/format";
 import { indexer } from "@/lib/indexer";
+import {
+  FactoryRefsAbi,
+  HookPolicyAbi,
+  LaunchDeployerAbi,
+  RegistryEconomicsAbi,
+} from "@/abis/vanityFragments";
+import {
+  VANITY_SUFFIX,
+  mineVanitySalt,
+  randomSeed,
+  type LaunchInputs,
+} from "@/lib/vanity";
 
 const erc20ApproveAbi = [
   {
@@ -114,10 +126,121 @@ export default function CreatePage() {
     [form, economicsPin],
   );
 
+  /**
+   * Grinds a salt so the token lands at an address ending 0x909, then has
+   * the deployer contract confirm the prediction before it is trusted.
+   * Every failure path falls back to a random salt: the launch never blocks
+   * on the vanity address, it just loses the suffix.
+   */
+  async function mineFor909(): Promise<{ seed: `0x${string}`; token: string } | null> {
+    if (!account || !publicClient || !quote) return null;
+    const factoryRead = { address: ADDRESSES.launchFactory, abi: FactoryRefsAbi } as const;
+    const [config, launchDeployer, graduationExecutor, locker, poolManager, policy, econ] =
+      await Promise.all([
+        publicClient.readContract({ ...factoryRead, functionName: "getLaunchConfig", args: [0n] }),
+        publicClient.readContract({ ...factoryRead, functionName: "launchDeployer" }),
+        publicClient.readContract({ ...factoryRead, functionName: "graduationExecutor" }),
+        publicClient.readContract({ ...factoryRead, functionName: "locker" }),
+        publicClient.readContract({ ...factoryRead, functionName: "poolManager" }),
+        publicClient.readContract({ address: ADDRESSES.hook, abi: HookPolicyAbi, functionName: "currentFeePolicy" }),
+        publicClient.readContract({
+          address: ADDRESSES.quoteRegistry,
+          abi: RegistryEconomicsAbi,
+          functionName: "getLaunchEconomics",
+          args: [quoteAddress],
+        }),
+      ]);
+    const rewardTokenDeployer = await publicClient.readContract({
+      address: launchDeployer,
+      abi: LaunchDeployerAbi,
+      functionName: "rewardTokenDeployer",
+    });
+
+    const inputs: LaunchInputs = {
+      name: form.name,
+      symbol: form.symbol,
+      logo: form.logo,
+      description: form.description,
+      socials: {
+        twitter: form.twitter,
+        telegram: form.telegram,
+        discord: "",
+        website: form.website,
+        farcaster: "",
+      },
+      creatorFeeRecipient: account,
+      originalDeployer: account,
+      creatorFeeBps: form.creatorFeeBps,
+      cashback: {
+        mode: form.cashbackMode,
+        shareBps: form.cashbackMode === 0 ? 0 : form.cashbackShareBps,
+      },
+      quoteToken: quoteAddress,
+      protocolFeeRecipient: policy.protocolFeeRecipient,
+      protocolFeeShareBps: policy.protocolFeeShareBps,
+      feeEscrow: ADDRESSES.feeEscrow,
+      phantomQuote: econ[0],
+      curveFeeBps: config.curveFeeBps,
+      graduationThreshold: econ[1],
+      supply: config.supply,
+      launchDeployer,
+      rewardTokenDeployer,
+      factory: ADDRESSES.launchFactory,
+      graduationExecutor,
+      locker,
+      poolManager,
+    };
+
+    const mined = await mineVanitySalt(inputs, {
+      onProgress: (n) => setStatus(`Mining your …${VANITY_SUFFIX} address (${n.toLocaleString()} tried)…`),
+    });
+    if (!mined) return null;
+
+    // The deployer contract is the authority; a mismatch means our local
+    // math drifted from the chain, so the mined salt is discarded.
+    const [confirmedToken] = await publicClient.readContract({
+      address: launchDeployer,
+      abi: LaunchDeployerAbi,
+      functionName: "predictLaunchAddresses",
+      args: [
+        {
+          quoteToken: inputs.quoteToken,
+          creatorFeeRecipient: inputs.creatorFeeRecipient,
+          originalDeployer: inputs.originalDeployer,
+          protocolFeeRecipient: inputs.protocolFeeRecipient,
+          protocolFeeShareBps: inputs.protocolFeeShareBps,
+          cashback: { mode: inputs.cashback.mode, shareBps: inputs.cashback.shareBps },
+          feeEscrow: inputs.feeEscrow,
+          phantomQuote: inputs.phantomQuote,
+          curveFeeBps: inputs.curveFeeBps,
+          creatorFeeBps: BigInt(inputs.creatorFeeBps),
+          graduationThreshold: inputs.graduationThreshold,
+          supply: inputs.supply,
+          salt: mined.seed,
+          name: inputs.name,
+          symbol: inputs.symbol,
+          logo: inputs.logo,
+          description: inputs.description,
+          socials: inputs.socials,
+        },
+      ],
+    });
+    if (confirmedToken.toLowerCase() !== mined.token.toLowerCase()) return null;
+    return { seed: mined.seed, token: confirmedToken };
+  }
+
   async function launch() {
     if (!account || !publicClient || !quote) return;
     setError(null);
     try {
+      setStatus(`Mining your …${VANITY_SUFFIX} address…`);
+      let salt: `0x${string}` = randomSeed();
+      try {
+        const mined = await mineFor909();
+        if (mined) salt = mined.seed;
+      } catch {
+        /* vanity is cosmetic; the launch proceeds on a random salt */
+      }
       if (devBuyAmount > 0n) {
         setStatus("Checking quote allowance…");
         const allowance = await publicClient.readContract({
@@ -144,7 +267,7 @@ export default function CreatePage() {
         abi: PopLaunchFactoryAbi,
         address: ADDRESSES.launchFactory,
         functionName: "launchToken",
-        args: [params, 0n, quoteAddress, devBuyAmount, 0n, []],
+        args: [{ ...params, salt }, 0n, quoteAddress, devBuyAmount, 0n, []],
         value: launchFee ?? 0n,
         account,
       });
