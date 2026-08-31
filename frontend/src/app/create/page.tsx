@@ -65,7 +65,7 @@ export default function CreatePage() {
     telegram: "",
     website: "",
     quote: "",
-    creatorFeeBps: 100,
+    creatorFeeBps: 0,
     cashbackMode: 2,
     cashbackShareBps: 5000,
     devBuy: "",

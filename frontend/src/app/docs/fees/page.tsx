@@ -48,7 +48,8 @@ export default function FeesDoc() {
 
       <h2>Worked example: $100 traded on any token</h2>
       <p>
-        A launch with a 1% creator fee and 50% cashback pledged. Total fee: 2% of the quote leg.
+        The default launch: no extra creator fee. Total fee: <strong>1% of the quote leg</strong>,
+        the same price as trading on Pons itself.
       </p>
       <table>
         <thead>
@@ -63,15 +64,15 @@ export default function FeesDoc() {
             <td>$0.50</td>
           </tr>
           <tr>
-            <td>The token&apos;s creator</td>
-            <td>$0.75</td>
-          </tr>
-          <tr>
-            <td>The creator&apos;s cashback pledge (burn / rebate / holders)</td>
-            <td>$0.75</td>
+            <td>The token&apos;s creator (less any cashback pledge)</td>
+            <td>$0.50</td>
           </tr>
         </tbody>
       </table>
+      <p>
+        A creator can add their own fee on top, up to 2% (Pons allows up to 10%); it is shown on the
+        token page before anyone trades, frozen at launch, and entirely theirs to pledge or keep.
+      </p>
 
       <h2>Where the protocol&apos;s share goes: $POP holders included</h2>
       <p>
@@ -94,7 +95,7 @@ export default function FeesDoc() {
 
       <h2>$POP&apos;s own fees: buyback and burn</h2>
       <p>
-        $POP launches with a 2% creator fee like any token could. Its creator revenue does not go to a
+        $POP itself trades at the default 1% total, no extra creator fee. Its creator revenue (the creator half of the base fee) does not go to a
         wallet either: it goes to an on-chain <strong>buyback burner</strong> whose split is a
         constructor constant, checkable forever: <strong>25% of $POP&apos;s creator fees market-buy
         $POP through its own pool and send it to the dead address</strong>; 75% goes to the protocol.

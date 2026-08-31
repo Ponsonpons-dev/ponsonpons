@@ -143,15 +143,18 @@ with three parameters that wire the revenue machinery:
 1. Cashback mode **Holder rewards** with share **0%**: deploys the
    reward-token variant (the machinery the splitter pays into) while pledging
    nothing from the creator side.
-2. Creator fee **2%**, and **creator fee recipient = the buyback burner**
-   (address in `deployments/4663.json`). Both freeze at launch.
+2. Creator fee **0%** (total trade fee on $POP: 1%, identical to every
+   default launch), and **creator fee recipient = the buyback burner**
+   (address in `deployments/4663.json`). Both freeze at launch. The burner
+   is fed by the creator half of the base fee.
 3. After the launch lands: `splitter.setPopToken(<POP address>)` (once).
    After $POP graduates: `burner.setPool(<POP pool key>)` (once), and point
    the keeper at the ops bot when it is running.
 
-Resulting economics per $100 of $POP volume: $2.30 owner, $0.625 burned,
-$0.075 to holders. Per $100 of any other token's volume: $0.425 owner,
-$0.075 to $POP holders, the rest per that creator's terms.
+Resulting economics per $100 of $POP volume: $0.80 owner ($0.425 protocol
+side + $0.375 from the burner's 75%), $0.125 burned, $0.075 to holders.
+Per $100 of any other token's volume: $0.425 owner, $0.075 to $POP
+holders, the rest per that creator's terms.
 
 ## Step 4, services
 
