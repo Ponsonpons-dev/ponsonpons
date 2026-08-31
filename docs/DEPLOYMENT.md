@@ -1,5 +1,11 @@
 # $POP mainnet deployment runbook
 
+> **Executed on mainnet 2026-08-31**, blocks 51,204,736 to 51,204,738,
+> 22 transactions, 0.0092 ETH total gas, all 12 contracts Sourcify-verified
+> with exact matches. `USE_TIMELOCK=false`; addresses in
+> `deployments/4663.json` and the root README. Steps 2 to 4 below remain the
+> live checklist for finishing the rollout.
+
 Every step below was executed end-to-end on an Anvil fork of Robinhood
 Chain mainnet (block ~50,500,000) on 2026-08-31, including the timelock
 governance handover and a complete launch lifecycle against real $PONS and
