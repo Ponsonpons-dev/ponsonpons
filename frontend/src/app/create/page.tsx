@@ -15,6 +15,7 @@ import { PopLaunchFactoryAbi } from "@/abis/PopLaunchFactory";
 import { FeeFlowDiagram } from "@/components/FeeFlowDiagram";
 import { ImageDrop } from "@/components/ImageDrop";
 import { ADDRESSES } from "@/lib/addresses";
+import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import { indexer } from "@/lib/indexer";
 import {
@@ -257,6 +258,7 @@ export default function CreatePage() {
             address: quoteAddress,
             functionName: "approve",
             args: [ADDRESSES.launchFactory, devBuyAmount],
+            ...(await feeOverrides(publicClient)),
           });
           await publicClient.waitForTransactionReceipt({ hash: approveHash });
         }
@@ -270,6 +272,7 @@ export default function CreatePage() {
         args: [{ ...params, salt }, 0n, quoteAddress, devBuyAmount, 0n, []],
         value: launchFee ?? 0n,
         account,
+        ...(await feeOverrides(publicClient)),
       });
 
       setStatus("Confirm in wallet…");

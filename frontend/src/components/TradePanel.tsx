@@ -13,6 +13,7 @@ import {
 import { PopBondingCurveAbi } from "@/abis/PopBondingCurve";
 import { PopLaunchTokenAbi } from "@/abis/PopLaunchToken";
 import { explorerTx } from "@/lib/addresses";
+import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import type { Launch, Quote } from "@/lib/indexer";
 
@@ -134,12 +135,13 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
   }
 
   const approve = () =>
-    run("Approving…", () =>
+    run("Approving…", async () =>
       writeContractAsync({
         abi: erc20Abi,
         address: inToken,
         functionName: "approve",
         args: [launch.curve, unlimitedApproval ? maxUint256 : parsedAmount],
+        ...(await feeOverrides(publicClient)),
       }),
     );
 
@@ -161,6 +163,7 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
         functionName: side,
         args: [parsedAmount, minOut < 0n ? 0n : minOut, account!, deadline],
         gas,
+        ...(await feeOverrides(publicClient)),
       });
     });
 

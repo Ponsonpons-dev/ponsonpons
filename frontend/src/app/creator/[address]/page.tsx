@@ -8,6 +8,7 @@ import { PopFeeEscrowAbi } from "@/abis/PopFeeEscrow";
 import { LaunchCard } from "@/components/cards";
 import { AddressLink, EmptyState, Stat } from "@/components/ui";
 import { ADDRESSES } from "@/lib/addresses";
+import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import { indexer } from "@/lib/indexer";
 
@@ -36,6 +37,7 @@ function ClaimRow({ quoteToken, symbol, decimals }: { quoteToken: `0x${string}`;
             address: ADDRESSES.feeEscrow,
             functionName: "claimToken",
             args: [quoteToken],
+            ...(await feeOverrides(publicClient)),
           });
           await publicClient?.waitForTransactionReceipt({ hash });
           await refetch();

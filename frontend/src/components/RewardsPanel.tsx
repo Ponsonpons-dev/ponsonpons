@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 
 import { PopRewardTokenAbi } from "@/abis/PopRewardToken";
+import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import type { Launch, Quote } from "@/lib/indexer";
 
@@ -44,6 +45,7 @@ export function RewardsPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
         abi: PopRewardTokenAbi,
         address: launch.token,
         functionName: "claim",
+        ...(await feeOverrides(publicClient)),
       });
       await publicClient?.waitForTransactionReceipt({ hash });
       await refetch();

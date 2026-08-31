@@ -7,6 +7,7 @@ import { useAccount, usePublicClient, useReadContract, useWriteContract } from "
 import { PopFeeEscrowAbi } from "@/abis/PopFeeEscrow";
 import { PopLaunchFactoryAbi } from "@/abis/PopLaunchFactory";
 import { ADDRESSES } from "@/lib/addresses";
+import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import type { Launch, Quote } from "@/lib/indexer";
 
@@ -58,12 +59,13 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
         className="btn-pop mt-3 w-full"
         disabled={busy || !claimable}
         onClick={() =>
-          act(() =>
+          act(async () =>
             writeContractAsync({
               abi: PopFeeEscrowAbi,
               address: ADDRESSES.feeEscrow,
               functionName: "claimToken",
               args: [launch.quoteToken],
+              ...(await feeOverrides(publicClient)),
             }),
           )
         }
@@ -84,12 +86,13 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
             className="btn-ghost shrink-0"
             disabled={busy || !isAddress(newRecipient)}
             onClick={() =>
-              act(() =>
+              act(async () =>
                 writeContractAsync({
                   abi: PopLaunchFactoryAbi,
                   address: ADDRESSES.launchFactory,
                   functionName: "transferCreatorFeeRecipient",
                   args: [launch.token, newRecipient as `0x${string}`],
+                  ...(await feeOverrides(publicClient)),
                 }),
               )
             }
