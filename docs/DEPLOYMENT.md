@@ -46,13 +46,30 @@ cd contracts
 
 # With the 48h timelock (default):
 PROTOCOL_OWNER=0x<safe> forge script script/Deploy.s.sol \
-  --rpc-url $RPC --broadcast --private-key $DEPLOYER_KEY \
+  --rpc-url $RPC --broadcast -i 1 --sender 0x<deployer> \
   --verify --verifier sourcify
 
 # Or owned directly, no timelock:
 PROTOCOL_OWNER=0x<addr> USE_TIMELOCK=false forge script script/Deploy.s.sol \
-  --rpc-url $RPC --broadcast --private-key $DEPLOYER_KEY \
+  --rpc-url $RPC --broadcast -i 1 --sender 0x<deployer> \
   --verify --verifier sourcify
+```
+
+`-i 1` prompts for the deployer key instead of putting it on the command
+line. **`--sender` is not optional with `-i`**: without it the dry run
+deploys as forge's default sender while the configuration calls run as the
+key's address, so the script dies on `OwnableUnauthorizedAccount` before
+broadcasting anything (observed on the first real deploy attempt). Declaring
+the sender also makes forge reject a pasted key that does not match the
+deployer address, so the wrong key cannot deploy.
+
+PowerShell equivalent (no backslash continuations, env vars via `$env:`):
+
+```powershell
+cd contracts
+$env:PROTOCOL_OWNER = "0x<addr>"
+$env:USE_TIMELOCK = "false"
+forge script script/Deploy.s.sol --rpc-url $RPC --broadcast -i 1 --sender 0x<deployer> --verify --verifier sourcify
 ```
 
 What the script does, in order: deploys the 48h `TimelockController` when
