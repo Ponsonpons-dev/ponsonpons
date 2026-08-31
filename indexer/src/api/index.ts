@@ -1,6 +1,7 @@
 import { db } from "ponder:api";
 import schema from "ponder:schema";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { client, desc, eq, graphql } from "ponder";
 
 /**
@@ -12,6 +13,10 @@ import { client, desc, eq, graphql } from "ponder";
  * - A few hot REST endpoints for the frontend's initial paints.
  */
 const app = new Hono();
+
+// Public read-only data; the browser calls this API cross-origin from the
+// site, so every route answers CORS. No credentials are ever involved.
+app.use("*", cors());
 
 app.use("/sql/*", client({ db, schema }));
 app.use("/graphql", graphql({ db, schema }));
