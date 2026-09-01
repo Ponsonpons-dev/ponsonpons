@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Providers } from "./providers";
+import { ClaimCenter } from "@/components/ClaimCenter";
 import { ConnectButtonSlot } from "@/components/ConnectButtonSlot";
 import { NavLinks } from "@/components/NavLinks";
 import { XLogo } from "@/components/icons";
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 >
                   <XLogo className="h-3.5 w-3.5" />
                 </a>
+                <ClaimCenter />
                 <ConnectButtonSlot />
               </div>
             </div>
