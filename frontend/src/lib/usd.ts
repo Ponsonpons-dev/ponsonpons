@@ -83,3 +83,36 @@ export function toWhole(raw: bigint | string | undefined, decimals = 18): number
     return null;
   }
 }
+
+/** USD market cap and volume strings for a launch, in its live denomination. */
+export function useLaunchUsd(
+  launch: {
+    phase: number;
+    quoteToken: string;
+    lastPriceQuoteWad: string;
+    supply: string;
+    volumeEth: string;
+    volumeQuote: string;
+  },
+  quoteDecimals = 18,
+) {
+  const rates = useUsdRates([launch.quoteToken]);
+  const rate = launch.phase === 0 ? rates.ethUsd : rates.quoteUsd(launch.quoteToken);
+  let mcWhole: number | null = null;
+  try {
+    mcWhole = Number((BigInt(launch.lastPriceQuoteWad) * BigInt(launch.supply)) / 10n ** 36n);
+  } catch {
+    mcWhole = null;
+  }
+  const volWhole = toWhole(
+    launch.phase === 0 ? launch.volumeEth : launch.volumeQuote,
+    launch.phase === 0 ? 18 : quoteDecimals,
+  );
+  return { mcUsd: fmtUsd(mcWhole, rate), volUsd: fmtUsd(volWhole, rate) };
+}
+
+/** USD string for a raw amount of one token (e.g. a quote's total volume). */
+export function useTokenUsdValue(token: string, raw: bigint | string | undefined, decimals = 18) {
+  const rates = useUsdRates([token]);
+  return fmtUsd(toWhole(raw, decimals), rates.quoteUsd(token));
+}

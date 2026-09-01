@@ -4,7 +4,8 @@ import Link from "next/link";
 
 import { CASHBACK_ICON, CASHBACK_TONE } from "./icons";
 import { ProgressBar, TokenLogo, TokenTile } from "./ui";
-import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, fmtPrice, timeAgo } from "@/lib/format";
+import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, timeAgo } from "@/lib/format";
+import { useLaunchUsd, useTokenUsdValue } from "@/lib/usd";
 import { curveProgress } from "@/lib/indexer";
 import type { Launch, Quote } from "@/lib/indexer";
 
@@ -32,6 +33,7 @@ function Metric({
 
 export function QuoteCard({ quote }: { quote: Quote }) {
   const rewards = Number(quote.totalHolderRewards) > 0;
+  const volUsd = useTokenUsdValue(quote.address, quote.totalVolume, quote.decimals);
   return (
     <Link
       href={`/quote/${quote.address}`}
@@ -53,7 +55,7 @@ export function QuoteCard({ quote }: { quote: Quote }) {
       <div className="grid grid-cols-2 gap-y-3">
         <Metric label="Launches" value={quote.launchCount} />
         <Metric label="Graduated" value={quote.graduatedCount} align="right" />
-        <Metric label="Volume" value={fmtAmount(quote.totalVolume, quote.decimals)} accent="text-pop" />
+        <Metric label="Volume" value={volUsd ?? `${fmtAmount(quote.totalVolume, quote.decimals)} ${quote.symbol ?? ""}`} accent="text-pop" />
         <Metric
           label="Burned"
           value={fmtAmount(quote.totalBurned, quote.decimals)}
@@ -87,6 +89,7 @@ export function LaunchCard({
   const live = launch.phase === 0;
   const Icon = CASHBACK_ICON[launch.cashbackMode];
   const tone = CASHBACK_TONE[launch.cashbackMode] ?? "text-dim";
+  const { mcUsd } = useLaunchUsd(launch, quoteDecimals);
 
   return (
     <Link
@@ -110,7 +113,7 @@ export function LaunchCard({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Metric label="Price" value={fmtPrice(launch.lastPriceQuoteWad, quoteDecimals)} accent="text-pop" />
+        <Metric label="Market cap" value={mcUsd ?? "…"} accent="text-pop" />
         <Metric
           label={live ? "Curve" : "Status"}
           value={live ? `${(curveProgress(launch).bps / 100).toFixed(1)}%` : PHASE_LABEL[launch.phase]}

@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 
 import { CASHBACK_ICON, CASHBACK_TONE } from "./icons";
 import { ProgressBar, TokenTile } from "./ui";
-import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, fmtPrice, timeAgo } from "@/lib/format";
+import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, timeAgo } from "@/lib/format";
+import { fmtUsd, toWhole, useLaunchUsd, useUsdRates } from "@/lib/usd";
 import { curveProgress } from "@/lib/indexer";
 import type { Launch } from "@/lib/indexer";
 
@@ -104,6 +105,7 @@ function Row({
   const live = launch.phase === 0;
   const Icon = CASHBACK_ICON[launch.cashbackMode];
   const tone = CASHBACK_TONE[launch.cashbackMode] ?? "text-dim";
+  const { mcUsd } = useLaunchUsd(launch, quoteDecimals);
 
   return (
     <Link
@@ -122,7 +124,7 @@ function Row({
           <span className="shrink-0 text-[11.5px] text-dim/80">${launch.symbol}</span>
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-[11px] sm:hidden">
-          <span className="tabular-nums text-pop">{fmtPrice(launch.lastPriceQuoteWad, quoteDecimals)}</span>
+          <span className="tabular-nums text-pop">{mcUsd ?? "…"}</span>
           {quoteSymbol && <span className="text-dim/70">${quoteSymbol}</span>}
           <span className={`flex items-center gap-1 ${tone}`}>
             {Icon && <Icon className="h-3 w-3" />}
@@ -147,7 +149,7 @@ function Row({
       </div>
 
       <div className="hidden text-[12.5px] tabular-nums text-ink sm:block">
-        {fmtPrice(launch.lastPriceQuoteWad, quoteDecimals)}
+        {mcUsd ?? "…"}
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
@@ -177,7 +179,7 @@ export function LaunchList({
         <span>Token</span>
         <span>Quote</span>
         <span>Curve</span>
-        <span>Price</span>
+        <span>Mcap</span>
         <span className="w-9 text-right">Age</span>
       </div>
       <div className="divide-y divide-edge">
@@ -212,6 +214,7 @@ export function QuoteList({
     totalBurned: string;
   }>;
 }) {
+  const rates = useUsdRates(quotes.map((q) => q.address));
   return (
     <div className="overflow-hidden rounded-[16px] border border-edge">
       <div className="hidden grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))] gap-4 border-b border-edge px-4 py-2.5 text-[9.5px] font-medium uppercase tracking-[0.16em] text-dim/70 sm:grid">
@@ -250,7 +253,7 @@ export function QuoteList({
               <span className="mr-1.5 text-[10px] uppercase tracking-[0.14em] text-dim/70 sm:hidden">
                 Volume
               </span>
-              {fmtAmount(q.totalVolume, q.decimals)}
+              {fmtUsd(toWhole(q.totalVolume, q.decimals), rates.quoteUsd(q.address)) ?? fmtAmount(q.totalVolume, q.decimals)}
             </div>
             <div className="text-right text-[12.5px] tabular-nums text-burn">
               <span className="mr-1.5 text-[10px] uppercase tracking-[0.14em] text-dim/70 sm:hidden">

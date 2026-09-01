@@ -7,6 +7,7 @@ import { LaunchCard } from "@/components/cards";
 import { AddressLink, BackLink, EmptyState, Skeleton, Stat } from "@/components/ui";
 import { fmtAmount } from "@/lib/format";
 import { indexer } from "@/lib/indexer";
+import { useTokenUsdValue } from "@/lib/usd";
 
 export default function QuotePage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
@@ -15,6 +16,7 @@ export default function QuotePage({ params }: { params: Promise<{ address: strin
     queryKey: ["launches", "quote", address],
     queryFn: () => indexer.launches({ quote: address, limit: 100 }),
   });
+  const volUsd = useTokenUsdValue(address, quoteQ.data?.totalVolume, quoteQ.data?.decimals ?? 18);
 
   if (quoteQ.isLoading) return <Skeleton className="h-64" />;
   const quote = quoteQ.data;
@@ -37,7 +39,7 @@ export default function QuotePage({ params }: { params: Promise<{ address: strin
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Launches" value={quote.launchCount} />
         <Stat label="Graduated" value={quote.graduatedCount} />
-        <Stat label="Volume" value={`${fmtAmount(quote.totalVolume, quote.decimals)} ${quote.symbol}`} />
+        <Stat label="Volume" value={volUsd ?? `${fmtAmount(quote.totalVolume, quote.decimals)} ${quote.symbol}`} />
         <Stat
           label="Burned forever"
           value={`${fmtAmount(quote.totalBurned, quote.decimals)} ${quote.symbol}`}
