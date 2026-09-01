@@ -64,7 +64,6 @@ export default function HomePage() {
   return (
     <div className="space-y-20 sm:space-y-24">
       <Landing
-        quoteCount={quotes.data?.length}
         launchCount={quoteTotals?.launches}
         graduatedCount={quoteTotals?.graduated}
         totals={totals.data}

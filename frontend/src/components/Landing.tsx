@@ -81,14 +81,12 @@ function Stat({ value, label }: { value: string | number; label: string }) {
 }
 
 export function Landing({
-  quoteCount,
   launchCount,
   graduatedCount,
   totals,
   ponsUsd,
   ethUsd,
 }: {
-  quoteCount?: number;
   launchCount?: number;
   graduatedCount?: number;
   /** Protocol-wide sums, refreshed live; undefined until the first fetch. */
@@ -160,19 +158,15 @@ export function Landing({
         </div>
 
         <hr className="rule mt-14 sm:mt-16" />
-        <div className="grid grid-cols-3 gap-4 py-7">
-          <Stat value={quoteCount ?? "…"} label="Quote tokens" />
+        {/* One row, one column count: counts and live protocol totals sit on
+            the same grid so nothing orphans onto a ragged second line. */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6 py-7 sm:grid-cols-3 lg:grid-cols-6">
           <Stat value={launchCount ?? "…"} label="Launches" />
           <Stat value={graduatedCount ?? "…"} label="Bonded" />
-        </div>
-        <hr className="rule" />
-        {/* Live protocol totals: what graduations have actually bought and
-            what the cashback modes have actually paid out or destroyed. */}
-        <div className="grid grid-cols-2 gap-4 py-7 sm:grid-cols-4">
           <Stat value={usdOr(totals?.quoteBought, ponsUsd)} label="Pons bought" />
-          <Stat value={usdOr(totals?.ethConverted, ethUsd, "ETH")} label="Raised into liquidity" />
-          <Stat value={usdOr(totals?.burned, ponsUsd)} label="Burned forever" />
-          <Stat value={usdOr(totals?.holderRewards, ponsUsd)} label="Paid to holders" />
+          <Stat value={usdOr(totals?.ethConverted, ethUsd, "ETH")} label="Liquidity locked" />
+          <Stat value={usdOr(totals?.burned, ponsUsd)} label="Burned" />
+          <Stat value={usdOr(totals?.holderRewards, ponsUsd)} label="To holders" />
         </div>
       </section>
 
