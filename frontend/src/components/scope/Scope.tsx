@@ -7,10 +7,11 @@ import { useEffect, useMemo, useState } from "react";
 import { FilterPanel } from "./FilterPanel";
 import { CASHBACK_ICON, CASHBACK_TONE } from "@/components/icons";
 import { ProgressBar, TokenTile } from "@/components/ui";
-import { CASHBACK_LABEL, fmtAmount, fmtPrice, timeAgo } from "@/lib/format";
+import { CASHBACK_LABEL, fmtAmount, timeAgo } from "@/lib/format";
 import type { Launch, Quote } from "@/lib/indexer";
 import { curveProgress, indexer } from "@/lib/indexer";
 import type { ColumnKey, Filters } from "@/lib/scope";
+import { fmtUsd, toWhole, useUsdRates } from "@/lib/usd";
 import {
   COLUMNS,
   SCOPE_FETCH_LIMIT,
@@ -31,13 +32,23 @@ function FilterGlyph({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-function Row({ launch, quote }: { launch: Launch; quote?: Quote }) {
+function Row({ launch, quote, usdRate }: { launch: Launch; quote?: Quote; usdRate: number | null }) {
   // Curve-phase launches trade and denominate in ETH; the quote token only
-  // becomes the pair (and the denomination) once the launch bonds.
+  // becomes the pair (and the denomination) once the launch bonds. usdRate is
+  // dollars per whole unit of that denomination.
   const bonded = launch.phase !== 0;
   const decimals = bonded ? (quote?.decimals ?? 18) : 18;
   const denomSymbol = bonded ? quote?.symbol : "ETH";
   const volume = bonded ? launch.volumeQuote : launch.volumeEth;
+  // Market cap reads far better than a 1.4e-8 price on a card this small.
+  let marketCap: bigint | undefined;
+  try {
+    marketCap = (BigInt(launch.lastPriceQuoteWad) * BigInt(launch.supply)) / 10n ** 36n;
+  } catch {
+    marketCap = undefined;
+  }
+  const mcUsd = fmtUsd(marketCap === undefined ? null : Number(marketCap), usdRate);
+  const volUsd = fmtUsd(toWhole(volume, decimals), usdRate);
   const Icon = CASHBACK_ICON[launch.cashbackMode];
   const tone = CASHBACK_TONE[launch.cashbackMode] ?? "text-dim";
   const live = launch.phase === 0;
@@ -65,9 +76,9 @@ function Row({ launch, quote }: { launch: Launch; quote?: Quote }) {
 
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] tabular-nums">
             {denomSymbol && <span className="text-dim/70">{bonded ? `$${denomSymbol}` : denomSymbol}</span>}
-            <span className="text-pop">{fmtPrice(launch.lastPriceQuoteWad, decimals)}</span>
+            <span className="text-pop">MC {mcUsd ?? `${fmtAmount(marketCap, 0, 1)} ${denomSymbol ?? ""}`}</span>
             <span className="text-dim">{launch.tradeCount} trades</span>
-            <span className="text-dim">{fmtAmount(volume, decimals)} vol</span>
+            <span className="text-dim">{volUsd ?? `${fmtAmount(volume, decimals)} ${denomSymbol ?? ""}`} vol</span>
             {Icon && (
               <span className={`flex items-center gap-1 ${tone}`} title={CASHBACK_LABEL[launch.cashbackMode]}>
                 <Icon className="h-3 w-3" />
@@ -96,6 +107,7 @@ function Column({
   launches,
   quotes,
   quoteFor,
+  rateFor,
   filters,
   onFilters,
   loading,
@@ -106,6 +118,7 @@ function Column({
   launches: Launch[];
   quotes: Quote[];
   quoteFor: (l: Launch) => Quote | undefined;
+  rateFor: (l: Launch) => number | null;
   filters: Filters;
   onFilters: (f: Filters) => void;
   loading: boolean;
@@ -158,7 +171,7 @@ function Column({
             ))}
           </div>
         ) : launches.length ? (
-          launches.map((l) => <Row key={l.token} launch={l} quote={quoteFor(l)} />)
+          launches.map((l) => <Row key={l.token} launch={l} quote={quoteFor(l)} usdRate={rateFor(l)} />)
         ) : (
           <p className="px-4 py-10 text-center text-[12.5px] leading-relaxed text-dim/70">
             {active > 0 ? "Nothing matches these filters." : "Nothing here yet."}
@@ -215,6 +228,8 @@ export function Scope() {
   );
   const quoteFor = (l: Launch) => quoteMap.get(l.quoteToken.toLowerCase());
   const quoteDecimals = (addr: string) => quoteMap.get(addr.toLowerCase())?.decimals ?? 18;
+  const rates = useUsdRates(quotes.map((q) => q.address));
+  const rateFor = (l: Launch) => (l.phase === 0 ? rates.ethUsd : rates.quoteUsd(l.quoteToken));
 
   // One clock for the whole board so every column agrees on "now".
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -287,6 +302,7 @@ export function Scope() {
               launches={c.launches}
               quotes={quotes}
               quoteFor={quoteFor}
+              rateFor={rateFor}
               filters={filters[c.key]}
               onFilters={(f) => setFilters((cur) => ({ ...cur, [c.key]: f }))}
               loading={loading}

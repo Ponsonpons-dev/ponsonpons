@@ -13,6 +13,7 @@ import { AddressLink, EmptyState, ProgressBar, Skeleton, Stat, TokenLogo } from 
 import { explorerTx } from "@/lib/addresses";
 import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, fmtPrice, shortAddr, timeAgo } from "@/lib/format";
 import { curveProgress, indexer } from "@/lib/indexer";
+import { fmtUsd, toWhole, useUsdRates } from "@/lib/usd";
 
 export default function TokenPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
@@ -29,6 +30,7 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
     queryFn: () => indexer.trades(address),
     refetchInterval: 4_000,
   });
+  const rates = useUsdRates(launch?.quoteToken ? [launch.quoteToken] : []);
 
   if (launchQ.isLoading) return <Skeleton className="h-96" />;
   if (!launch) return <EmptyState>Token not found. Is the indexer synced?</EmptyState>;
@@ -41,8 +43,13 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
   const live = launch?.phase === 0;
   const dd = live ? 18 : qd;
   const ds = live ? "ETH" : qs;
-  // Market cap in quote terms = price * supply.
+  // Market cap in quote terms = price * supply. usdRate is dollars per whole
+  // unit of the active denomination (ETH pre-bond, the quote after).
   const mcQuote = (BigInt(launch.lastPriceQuoteWad) * BigInt(launch.supply)) / 10n ** 18n;
+  const usdRate = launch.phase === 0 ? rates.ethUsd : rates.quoteUsd(launch.quoteToken);
+  const priceUsd = fmtUsd(toWhole(launch.lastPriceQuoteWad, 18), usdRate);
+  const mcUsd = fmtUsd(toWhole(mcQuote, dd), usdRate);
+  const volUsd = fmtUsd(toWhole(launch.phase === 0 ? launch.volumeEth : launch.volumeQuote, dd), usdRate);
 
   return (
     <div className="space-y-4">
@@ -87,12 +94,12 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
       </div>
 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-        <Stat label={`Price (${ds})`} value={fmtPrice(launch.lastPriceQuoteWad, dd)} />
-        <Stat label={`MC (${ds})`} value={fmtAmount(mcQuote, dd)} />
+        <Stat label={priceUsd ? "Price" : `Price (${ds})`} value={priceUsd ?? fmtPrice(launch.lastPriceQuoteWad, dd)} />
+        <Stat label={mcUsd ? "Market cap" : `MC (${ds})`} value={mcUsd ?? fmtAmount(mcQuote, dd)} />
         <Stat label="Trades" value={launch.tradeCount} />
         <Stat
-          label={live ? "Volume (ETH)" : `Volume (${qs})`}
-          value={fmtAmount(live ? launch.volumeEth : launch.volumeQuote, dd)}
+          label={volUsd ? "Volume" : live ? "Volume (ETH)" : `Volume (${qs})`}
+          value={volUsd ?? fmtAmount(live ? launch.volumeEth : launch.volumeQuote, dd)}
         />
         {launch.cashbackMode === 3 ? (
           <Stat

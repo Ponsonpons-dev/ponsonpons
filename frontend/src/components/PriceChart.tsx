@@ -59,7 +59,14 @@ export function PriceChart({ token, quoteDecimals }: { token: string; quoteDecim
         low: Number(c.low) / scale,
         close: Number(c.close) / scale,
       }));
-    series.setData(rows);
+    // The pool prints one absurd tick whenever a swap runs into its price
+    // limit (the graduation crossing does this), and a single 1e38 candle
+    // flattens the whole axis. Anything four orders of magnitude off the
+    // median close is that artifact, not a trade worth charting.
+    const closes = rows.map((r) => r.close).filter((v) => v > 0).sort((a, b) => a - b);
+    const median = closes[Math.floor(closes.length / 2)] ?? 0;
+    const sane = median > 0 ? rows.filter((r) => r.high <= median * 1e4 && r.low >= median / 1e4) : rows;
+    series.setData(sane.length ? sane : rows);
     chart.timeScale().fitContent();
 
     return () => chart.remove();
