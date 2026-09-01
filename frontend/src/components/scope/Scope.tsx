@@ -32,7 +32,12 @@ function FilterGlyph({ className = "h-3.5 w-3.5" }: { className?: string }) {
 }
 
 function Row({ launch, quote }: { launch: Launch; quote?: Quote }) {
-  const decimals = quote?.decimals ?? 18;
+  // Curve-phase launches trade and denominate in ETH; the quote token only
+  // becomes the pair (and the denomination) once the launch bonds.
+  const bonded = launch.phase !== 0;
+  const decimals = bonded ? (quote?.decimals ?? 18) : 18;
+  const denomSymbol = bonded ? quote?.symbol : "ETH";
+  const volume = bonded ? launch.volumeQuote : launch.volumeEth;
   const Icon = CASHBACK_ICON[launch.cashbackMode];
   const tone = CASHBACK_TONE[launch.cashbackMode] ?? "text-dim";
   const live = launch.phase === 0;
@@ -59,10 +64,10 @@ function Row({ launch, quote }: { launch: Launch; quote?: Quote }) {
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] tabular-nums">
-            {quote?.symbol && <span className="text-dim/70">${quote.symbol}</span>}
+            {denomSymbol && <span className="text-dim/70">{bonded ? `$${denomSymbol}` : denomSymbol}</span>}
             <span className="text-pop">{fmtPrice(launch.lastPriceQuoteWad, decimals)}</span>
             <span className="text-dim">{launch.tradeCount} trades</span>
-            <span className="text-dim">{fmtAmount(launch.volumeQuote, decimals)} vol</span>
+            <span className="text-dim">{fmtAmount(volume, decimals)} vol</span>
             {Icon && (
               <span className={`flex items-center gap-1 ${tone}`} title={CASHBACK_LABEL[launch.cashbackMode]}>
                 <Icon className="h-3 w-3" />

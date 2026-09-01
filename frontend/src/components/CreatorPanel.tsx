@@ -5,6 +5,7 @@ import { isAddress } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 
 import { PopFeeEscrowAbi } from "@/abis/PopFeeEscrow";
+import { PopHookAbi } from "@/abis/PopHook";
 import { PopLaunchFactoryAbi } from "@/abis/PopLaunchFactory";
 import { ADDRESSES } from "@/lib/addresses";
 import { feeOverrides } from "@/lib/fees";
@@ -38,6 +39,26 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
     query: { enabled: isCreator, refetchInterval: 8_000 },
   });
 
+  // Fees spend most of their life accruing in the hook's per-pool buckets and
+  // only reach the claimable escrow after a sweep; show both stages so the
+  // meter visibly runs between harvests.
+  const activePoolId = launch.phase === 1 && launch.bondedPoolId ? launch.bondedPoolId : launch.curvePoolId;
+  const accrualQuote = launch.phase === 1 ? launch.quoteToken : ADDRESSES.weth;
+  const { data: accruingQuote } = useReadContract({
+    abi: PopHookAbi,
+    address: ADDRESSES.hook,
+    functionName: "pendingCreatorFees",
+    args: [activePoolId, accrualQuote],
+    query: { enabled: isCreator, refetchInterval: 8_000 },
+  });
+  const { data: accruingToken } = useReadContract({
+    abi: PopHookAbi,
+    address: ADDRESSES.hook,
+    functionName: "pendingCreatorFees",
+    args: [activePoolId, launch.token],
+    query: { enabled: isCreator, refetchInterval: 8_000 },
+  });
+
   if (!isCreator) return null;
 
   async function act(fn: () => Promise<`0x${string}`>) {
@@ -59,6 +80,15 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
     <div className="card border-pop/30 p-4">
       <div className="mb-2 text-sm font-bold text-pop">Creator panel</div>
       <div className="space-y-1 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-dim">Accruing (before sweep)</span>
+          <span className="font-semibold">
+            {fmtAmount(accruingQuote, launch.phase === 1 ? (quoteInfo?.decimals ?? 18) : 18)}{" "}
+            {launch.phase === 1 ? (quoteInfo?.symbol ?? "quote") : "WETH"}
+            {" + "}
+            {fmtAmount(accruingToken, 18)} {launch.symbol}
+          </span>
+        </div>
         <div className="flex items-center justify-between">
           <span className="text-dim">Claimable curve-phase fees (ETH)</span>
           <span className="font-semibold">{fmtAmount(claimableWeth, 18)} WETH</span>
