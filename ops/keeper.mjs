@@ -105,7 +105,10 @@ async function refreshLaunches() {
 async function fees() {
   const block = await publicClient.getBlock();
   const base = block.baseFeePerGas ?? 500_000_000n;
-  return { maxFeePerGas: base * 3n + 10_000_000n, maxPriorityFeePerGas: 10_000_000n };
+  // The explicit gas limit matters: estimating with fee caps but no gas makes
+  // this chain's node check affordability against the block gas cap, which
+  // rejects any sanely funded wallet with "exceeds the balance".
+  return { gas: 3_000_000n, maxFeePerGas: base * 3n + 10_000_000n, maxPriorityFeePerGas: 10_000_000n };
 }
 
 async function bond(token) {
