@@ -26,20 +26,18 @@ export function FeeFlowDiagram({
   const rows = [
     { label: "Protocol", bps: protocolBps, color: "bg-dim" },
     { label: "Creator (you)", bps: creatorNetBps, color: "bg-pop" },
-    ...(cashbackMode === 1
-      ? [{ label: "Rebated to traders", bps: cashbackBps, color: "bg-up" }]
-      : cashbackMode === 2
-        ? [{ label: "Burned quote", bps: cashbackBps, color: "bg-burn" }]
-        : cashbackMode === 3
-          ? [{ label: "Paid to holders", bps: cashbackBps, color: "bg-up" }]
-          : []),
+    ...(cashbackMode === 2
+      ? [{ label: "Burned quote", bps: cashbackBps, color: "bg-burn" }]
+      : cashbackMode === 3
+        ? [{ label: "Paid to holders", bps: cashbackBps, color: "bg-up" }]
+        : []),
   ];
 
   return (
     <div className="card p-4">
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-sm font-semibold">Fee flow per trade</span>
-        <span className="text-xs text-dim">total {(totalBps / 100).toFixed(2)}% of the quote leg</span>
+        <span className="text-xs text-dim">total {(totalBps / 100).toFixed(2)}% of each trade</span>
       </div>
       <div className="flex h-4 w-full overflow-hidden rounded-full">
         {rows.map((r) => (
@@ -62,21 +60,17 @@ export function FeeFlowDiagram({
           </div>
         ))}
       </div>
-      {cashbackMode === 1 && (
-        <p className="mt-2 text-[11px] leading-relaxed text-dim">
-          Trader rebates apply while the token trades on its curve; after graduation that share stays
-          with you. This is fixed at launch and disclosed on the token page.
-        </p>
-      )}
       {cashbackMode === 2 && (
         <p className="mt-2 text-[11px] leading-relaxed text-dim">
-          Quote burn runs forever, on the curve and on the graduated pool. Launching with burn on makes
-          your quote token's community your marketing team.
+          Quote burn runs forever; curve-phase carve-outs convert and burn at the bond, pool-phase
+          burns happen at each sweep. Launching with burn on makes your quote token's community your
+          marketing team.
         </p>
       )}
       {cashbackMode === 3 && (
         <p className="mt-2 text-[11px] leading-relaxed text-dim">
-          Holder rewards run forever too, paid in the quote token to everyone holding your token, with no
+          Holder rewards run forever too, paid in the bond quote to everyone holding your token
+          (curve-phase carve-outs convert at the bond), with no
           staking, no snapshots, no operator. This mode deploys the reward-token variant, which carries
           an accounting-only transfer hook (still no owner and no transfer restrictions); every other
           mode gets the completely inert token.

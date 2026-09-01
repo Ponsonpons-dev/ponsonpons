@@ -1,7 +1,17 @@
 # $POP, audit scope & reviewer's guide
 
-Prepared 2026-08-31. Commit: see `git log` on
-`claude/quote-token-launchpad-robinhood-5c0j4b`.
+Prepared 2026-08-31 for v1; scope table updated for v2 on 2026-09-01.
+
+> **v2 note.** The architecture changed on 2026-09-01: the standalone
+> PopBondingCurve is gone. Every launch now trades in WETH inside a live
+> Uniswap V4 pool from its first block (the curve is a single-sided
+> position the factory holds), and "graduation" became **bonding**: the
+> raise is market-bought into the quote token (TWAP-bounded) and re-seeded
+> as a locked token/quote pool. The narrative sections below describe v1
+> mechanics where they mention the curve contract; the trust model,
+> registry, locker, escrow, hook fee machinery, and the "what the owner
+> can and cannot do" inventory carry over unchanged. A full v2 rewrite of
+> this document is owed before the external audit engagement.
 
 $POP is a token launchpad on Robinhood Chain (chain id 4663). Tokens launch
 on a constant-product bonding curve **denominated in an existing graduated
@@ -22,7 +32,8 @@ line-by-line diff and is the most useful section for a reviewer.
 
 | Contract | nSLOC | Risk |
 |---|---|---|
-| `PopBondingCurve.sol` | ~420 | **Critical**: holds all pre-graduation user funds |
+| `PopLaunchFactory.sol` (curve + bond paths) | ~1000 | **Critical**: holds every pre-bond curve position and executes the WETH to quote bond conversion |
+| `PopSwapRouter.sol` | ~260 | High: the site's and bots' ETH entry point; stateless but routes user funds |
 | `PopLaunchFactory.sol` | ~560 | **Critical**: orchestrates graduation, moves reserves |
 | `PopHook.sol` | ~420 | **Critical**, V4 hook, flash-accounting, holds pool fees |
 | `PopQuoteRegistry.sol` | ~200 | High, decides what may be a quote asset |
@@ -36,7 +47,6 @@ line-by-line diff and is the most useful section for a reviewer.
 | `PopRewardTokenDeployer.sol` | ~60 | Low, CREATE2 for the above |
 | `PopRevenueSplitter.sol` | ~90 | Medium, splits protocol revenue between owner and $POP holders; owner-adjustable share, permissionless crank |
 | `PopBuybackBurner.sol` | ~150 | **High**, holds $POP buyback budget, performs V4 unlock-callback swaps; keeper is timing-only, output pinned to `0xdead` |
-| `libraries/PopCurveMath.sol` | ~60 | **Critical**: pricing |
 | `libraries/PopGraduationMath.sol` | ~40 | High, seed price |
 | `adapters/PonsV1QuoteAdapter.sol` | ~90 | High, graduation proof + TWAP |
 

@@ -37,4 +37,4 @@ export function timeAgo(ts: bigint | string | number): string {
 }
 
 export const CASHBACK_LABEL = ["No cashback", "Trader rebate", "Quote burn", "Holder rewards"] as const;
-export const PHASE_LABEL = ["Trading on curve", "Graduating…", "Graduated", "Rescued"] as const;
+export const PHASE_LABEL = ["Trading in ETH", "Bonded", "Rescued"] as const;

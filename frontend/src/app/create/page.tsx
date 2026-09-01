@@ -18,35 +18,13 @@ import { ADDRESSES } from "@/lib/addresses";
 import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import { indexer } from "@/lib/indexer";
-import {
-  FactoryRefsAbi,
-  HookPolicyAbi,
-  LaunchDeployerAbi,
-  RegistryEconomicsAbi,
-} from "@/abis/vanityFragments";
+import { FactoryRefsAbi, LaunchDeployerAbi } from "@/abis/vanityFragments";
 import {
   VANITY_SUFFIX,
   mineVanitySalt,
   randomSeed,
   type LaunchInputs,
 } from "@/lib/vanity";
-
-const erc20ApproveAbi = [
-  {
-    type: "function",
-    name: "approve",
-    stateMutability: "nonpayable",
-    inputs: [{ type: "address" }, { type: "uint256" }],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "allowance",
-    stateMutability: "view",
-    inputs: [{ type: "address" }, { type: "address" }],
-    outputs: [{ type: "uint256" }],
-  },
-] as const;
 
 export default function CreatePage() {
   const router = useRouter();
@@ -91,13 +69,14 @@ export default function CreatePage() {
     query: { enabled: !!quote, refetchInterval: 15_000 },
   });
 
+  // Dev buys are plain ETH now: they ride the launch transaction's value.
   const devBuyAmount = useMemo(() => {
     try {
-      return form.devBuy ? parseUnits(form.devBuy, quote?.decimals ?? 18) : 0n;
+      return form.devBuy ? parseUnits(form.devBuy, 18) : 0n;
     } catch {
       return 0n;
     }
-  }, [form.devBuy, quote?.decimals]);
+  }, [form.devBuy]);
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,21 +115,13 @@ export default function CreatePage() {
   async function mineFor909(): Promise<{ seed: `0x${string}`; token: string } | null> {
     if (!account || !publicClient || !quote) return null;
     const factoryRead = { address: ADDRESSES.launchFactory, abi: FactoryRefsAbi } as const;
-    const [config, launchDeployer, graduationExecutor, locker, poolManager, policy, econ] =
-      await Promise.all([
-        publicClient.readContract({ ...factoryRead, functionName: "getLaunchConfig", args: [0n] }),
-        publicClient.readContract({ ...factoryRead, functionName: "launchDeployer" }),
-        publicClient.readContract({ ...factoryRead, functionName: "graduationExecutor" }),
-        publicClient.readContract({ ...factoryRead, functionName: "locker" }),
-        publicClient.readContract({ ...factoryRead, functionName: "poolManager" }),
-        publicClient.readContract({ address: ADDRESSES.hook, abi: HookPolicyAbi, functionName: "currentFeePolicy" }),
-        publicClient.readContract({
-          address: ADDRESSES.quoteRegistry,
-          abi: RegistryEconomicsAbi,
-          functionName: "getLaunchEconomics",
-          args: [quoteAddress],
-        }),
-      ]);
+    const [config, launchDeployer, hookAddr, locker, poolManager] = await Promise.all([
+      publicClient.readContract({ ...factoryRead, functionName: "getLaunchConfig", args: [0n] }),
+      publicClient.readContract({ ...factoryRead, functionName: "launchDeployer" }),
+      publicClient.readContract({ ...factoryRead, functionName: "hook" }),
+      publicClient.readContract({ ...factoryRead, functionName: "locker" }),
+      publicClient.readContract({ ...factoryRead, functionName: "poolManager" }),
+    ]);
     const rewardTokenDeployer = await publicClient.readContract({
       address: launchDeployer,
       abi: LaunchDeployerAbi,
@@ -169,25 +140,17 @@ export default function CreatePage() {
         website: form.website,
         farcaster: "",
       },
-      creatorFeeRecipient: account,
       originalDeployer: account,
-      creatorFeeBps: form.creatorFeeBps,
       cashback: {
         mode: form.cashbackMode,
         shareBps: form.cashbackMode === 0 ? 0 : form.cashbackShareBps,
       },
       quoteToken: quoteAddress,
-      protocolFeeRecipient: policy.protocolFeeRecipient,
-      protocolFeeShareBps: policy.protocolFeeShareBps,
-      feeEscrow: ADDRESSES.feeEscrow,
-      phantomQuote: econ[0],
-      curveFeeBps: config.curveFeeBps,
-      graduationThreshold: econ[1],
       supply: config.supply,
       launchDeployer,
       rewardTokenDeployer,
       factory: ADDRESSES.launchFactory,
-      graduationExecutor,
+      hook: hookAddr,
       locker,
       poolManager,
     };
@@ -199,23 +162,15 @@ export default function CreatePage() {
 
     // The deployer contract is the authority; a mismatch means our local
     // math drifted from the chain, so the mined salt is discarded.
-    const [confirmedToken] = await publicClient.readContract({
+    const confirmedToken = await publicClient.readContract({
       address: launchDeployer,
       abi: LaunchDeployerAbi,
-      functionName: "predictLaunchAddresses",
+      functionName: "predictLaunchAddress",
       args: [
         {
           quoteToken: inputs.quoteToken,
-          creatorFeeRecipient: inputs.creatorFeeRecipient,
           originalDeployer: inputs.originalDeployer,
-          protocolFeeRecipient: inputs.protocolFeeRecipient,
-          protocolFeeShareBps: inputs.protocolFeeShareBps,
           cashback: { mode: inputs.cashback.mode, shareBps: inputs.cashback.shareBps },
-          feeEscrow: inputs.feeEscrow,
-          phantomQuote: inputs.phantomQuote,
-          curveFeeBps: inputs.curveFeeBps,
-          creatorFeeBps: BigInt(inputs.creatorFeeBps),
-          graduationThreshold: inputs.graduationThreshold,
           supply: inputs.supply,
           salt: mined.seed,
           name: inputs.name,
@@ -242,35 +197,15 @@ export default function CreatePage() {
       } catch {
         /* vanity is cosmetic; the launch proceeds on a random salt */
       }
-      if (devBuyAmount > 0n) {
-        setStatus("Checking quote allowance…");
-        const allowance = await publicClient.readContract({
-          abi: erc20ApproveAbi,
-          address: quoteAddress,
-          functionName: "allowance",
-          args: [account, ADDRESSES.launchFactory],
-        });
-        if (allowance < devBuyAmount) {
-          setStatus(`Approving ${quote.symbol} for the dev buy…`);
-          // Exact-amount approval, always.
-          const approveHash = await writeContractAsync({
-            abi: erc20ApproveAbi,
-            address: quoteAddress,
-            functionName: "approve",
-            args: [ADDRESSES.launchFactory, devBuyAmount],
-            ...(await feeOverrides(publicClient)),
-          });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
-        }
-      }
-
       setStatus("Simulating launch…");
+      // The dev buy is plain ETH riding the launch transaction's value on
+      // top of the launch fee. No token approvals anywhere.
       const { request } = await publicClient.simulateContract({
         abi: PopLaunchFactoryAbi,
         address: ADDRESSES.launchFactory,
         functionName: "launchToken",
-        args: [{ ...params, salt }, 0n, quoteAddress, devBuyAmount, 0n, []],
-        value: launchFee ?? 0n,
+        args: [{ ...params, salt }, 0n, quoteAddress, 0n],
+        value: (launchFee ?? 0n) + devBuyAmount,
         account,
         ...(await feeOverrides(publicClient)),
       });
@@ -306,8 +241,9 @@ export default function CreatePage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-[26px] font-extrabold tracking-[-0.8px]">Launch a token</h1>
       <p className="mt-1 text-sm text-dim">
-        Pick a graduated Pons token as your quote. Your fee settings are immutable once launched. They
-        are the deal you make with your traders.
+        Your token trades in plain ETH from its first block, on a real Uniswap pool any wallet or bot
+        can reach. When the curve fills, the whole raise market-buys your chosen Pons quote token and
+        the pair moves to it, liquidity locked forever. Fee settings are immutable once launched.
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -365,9 +301,7 @@ export default function CreatePage() {
             <div className="mt-1 text-[11px] text-dim">
               {q.launchCount} launches · {fmtAmount(q.totalBurned, q.decimals)} burned
             </div>
-            <div className="text-[11px] text-dim">
-              graduates at {fmtAmount(q.graduationThreshold, q.decimals)} {q.symbol}
-            </div>
+            <div className="text-[11px] text-dim">curve in ETH · bonds into ${q.symbol}</div>
           </button>
         ))}
         {!quotes.length && (
@@ -396,8 +330,12 @@ export default function CreatePage() {
           </div>
           <div>
             <label className="label">Cashback mode</label>
-            <div className="grid grid-cols-2 gap-1 rounded-field border border-edge bg-input p-1 text-[12.5px]">
-              {["None", "Trader rebate", "Quote burn", "Holder rewards"].map((label, mode) => (
+            <div className="grid grid-cols-3 gap-1 rounded-field border border-edge bg-input p-1 text-[12.5px]">
+              {[
+                { label: "None", mode: 0 },
+                { label: "Quote burn", mode: 2 },
+                { label: "Holder rewards", mode: 3 },
+              ].map(({ label, mode }) => (
                 <button
                   key={label}
                   onClick={() => set("cashbackMode")(mode)}
@@ -416,7 +354,7 @@ export default function CreatePage() {
             <div>
               <label className="label">
                 Share of your take routed to{" "}
-                {form.cashbackMode === 1 ? "traders" : form.cashbackMode === 3 ? "your holders" : "the burn"}:{" "}
+                {form.cashbackMode === 3 ? "your holders" : "the burn"}:{" "}
                 {form.cashbackShareBps / 100}%
               </label>
               <input
@@ -431,7 +369,7 @@ export default function CreatePage() {
             </div>
           )}
           <div>
-            <label className="label">Dev buy ({quote?.symbol ?? "quote"}, optional, snipe-tax exempt)</label>
+            <label className="label">Dev buy (ETH, optional, snipe-tax exempt)</label>
             <input
               className="input"
               inputMode="decimal"

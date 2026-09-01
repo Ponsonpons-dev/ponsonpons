@@ -1,10 +1,13 @@
 # $POP mainnet deployment runbook
 
-> **Executed on mainnet 2026-08-31**, blocks 51,204,736 to 51,204,738,
-> 22 transactions, 0.0092 ETH total gas, all 12 contracts Sourcify-verified
-> with exact matches. `USE_TIMELOCK=false`; addresses in
-> `deployments/4663.json` and the root README. Steps 2 to 4 below remain the
-> live checklist for finishing the rollout.
+> **v2 executed on mainnet 2026-09-01**, blocks 51,319,197 to 51,319,199,
+> 23 transactions, ~0.0119 ETH total gas, all 13 contracts Sourcify-verified
+> with exact matches; `USE_TIMELOCK=false`; four `acceptOwnership` and the
+> owner whitelist landed the same day. Addresses in `deployments/4663.json`
+> and the root README. (v1, 2026-08-31 at 51,204,736+, was superseded before
+> opening to the public and is preserved in git history.) The remaining live
+> checklist: step 3.5 ($POP itself) and step 4 (services), then
+> `setLaunchEnabled(true)`.
 
 Every step below was executed end-to-end on an Anvil fork of Robinhood
 Chain mainnet (block ~50,500,000) on 2026-08-31, including the timelock
@@ -154,18 +157,21 @@ with three parameters that wire the revenue machinery:
    (address in `deployments/4663.json`). Both freeze at launch. The burner
    is fed by the creator half of the base fee.
 3. After the launch lands: `splitter.setPopToken(<POP address>)` (once).
-   After $POP graduates: `burner.setPool(<POP pool key>)` (once), and point
-   the keeper at the ops bot when it is running.
+   After $POP bonds: `burner.setPool(<POP bonded pool key>)` (once), and
+   point the keeper at the ops bot when it is running.
 
 Resulting economics per $100 of $POP volume: $0.80 owner ($0.425 protocol
 side + $0.375 from the burner's 75%), $0.125 burned, $0.075 to holders.
 Per $100 of any other token's volume: $0.425 owner, $0.075 to $POP
-holders, the rest per that creator's terms.
+holders, the rest per that creator's terms. Curve-phase revenue arrives in
+WETH; `convertAndDistribute` on the splitter and burner market-buys PONS
+with it (TWAP-bounded) before applying the same splits.
 
 ## Step 4, services
 
-- `indexer/`: fill `.env` from `deployments/4663.json` (+
-  `POP_START_BLOCK` = factory deploy block), `docker compose up -d`.
+- `indexer/`: fill `.env.local` from `deployments/4663.json` (+
+  `POP_START_BLOCK` = factory deploy block, 51319197 for v2); hosted on
+  Railway with a managed Postgres.
 - `frontend/`: fill `.env.local` (addresses, indexer URL, WalletConnect
   id), deploy to Vercel.
 - `ops/keeper.mjs`: run under pm2/systemd with a funded keeper key.
@@ -173,7 +179,18 @@ holders, the rest per that creator's terms.
   for any graduated Pons v1 token above the 25-WETH locked floor
   ($DELTA, $HMM, … candidates in docs/ARCHITECTURE.md §6).
 
-## Fork dry-run results (2026-08-31)
+## v2 fork validation (2026-09-01)
+
+The v2 rebuild (ETH curve inside a live V4 pool, bond converts the raise to
+the quote) was validated by the committed fork suite before deploy:
+`test/fork/RobinhoodFork.t.sol` launches against the real canonical
+PoolManager, buys the curve with real WETH through a generic third-party
+router, fills the 4.2 ETH range, and executes a real WETH to PONS bond
+conversion on the real Pons V3 pool inside the 5% TWAP bound, ending with
+the position locked in PopLocker and a post-bond ETH buy through
+PopSwapRouter. The v1 dry-run record below is preserved for history.
+
+## v1 fork dry-run results (2026-08-31, superseded)
 
 - Deploy: 27.2M gas total; hook mined to a valid flags address; $PONS
   listed with live-TWAP economics **threshold 33,197.7 PONS / phantom

@@ -106,6 +106,54 @@ export const PopQuoteRegistryAbi = [
  },
  {
   "type": "function",
+  "name": "bondConversion",
+  "inputs": [
+   {
+    "name": "quote",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "pool",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "quotePerEthTwap",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ethLaunchEconomics",
+  "inputs": [
+   {
+    "name": "quote",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "phantomEth",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "bondThresholdEth",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "getLaunchEconomics",
   "inputs": [
    {

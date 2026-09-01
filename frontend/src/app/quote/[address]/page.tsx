@@ -48,11 +48,6 @@ export default function QuotePage({ params }: { params: Promise<{ address: strin
           value={`${fmtAmount(quote.totalHolderRewards, quote.decimals)} ${quote.symbol}`}
           accent="text-up"
         />
-        <Stat
-          label="Rebated to traders"
-          value={`${fmtAmount(quote.totalRebates, quote.decimals)} ${quote.symbol}`}
-          accent="text-up"
-        />
       </div>
 
       <section>

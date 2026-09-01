@@ -40,7 +40,7 @@ function SectionHead({
 export default function HomePage() {
   const quotes = useQuery({ queryKey: ["quotes"], queryFn: indexer.quotes });
   const trending = useQuery({ queryKey: ["trending"], queryFn: () => indexer.trending() });
-  const graduated = useQuery({ queryKey: ["graduated"], queryFn: () => indexer.recentlyGraduated() });
+  const graduated = useQuery({ queryKey: ["bonded"], queryFn: () => indexer.recentlyBonded() });
 
   const [view, setView] = useView();
   const quoteMeta = new Map(quotes.data?.map((q) => [q.address.toLowerCase(), q]) ?? []);
@@ -136,7 +136,7 @@ export default function HomePage() {
         {graduated.data?.length ? (
           view === "grid" ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {graduated.data.map((l) => {
+              {graduated.data.map((l: import("@/lib/indexer").Launch) => {
                 const q = quoteFor(l);
                 return (
                   <LaunchCard

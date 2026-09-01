@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { CASHBACK_ICON, CASHBACK_TONE } from "./icons";
 import { ProgressBar, TokenTile } from "./ui";
 import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, fmtPrice, timeAgo } from "@/lib/format";
+import { curveProgress } from "@/lib/indexer";
 import type { Launch } from "@/lib/indexer";
 
 export type View = "grid" | "list";
@@ -135,9 +136,9 @@ function Row({
       <div className="hidden sm:block">
         {live ? (
           <div className="flex items-center gap-2">
-            <ProgressBar bps={launch.curveProgressBps} />
+            <ProgressBar bps={curveProgress(launch).bps} />
             <span className="w-11 shrink-0 text-right text-[12px] tabular-nums text-dim">
-              {(launch.curveProgressBps / 100).toFixed(0)}%
+              {(curveProgress(launch).bps / 100).toFixed(0)}%
             </span>
           </div>
         ) : (

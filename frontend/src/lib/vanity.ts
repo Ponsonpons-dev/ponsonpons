@@ -4,14 +4,16 @@
  *
  * How: the token's address is CREATE2-derived from the creator's salt, so the
  * browser grinds salts until the predicted address matches. The prediction
- * mirrors PopLaunchDeployer exactly, curve first (its address is a token
- * constructor argument), then the token, using the same creation bytecode the
+ * mirrors PopLaunchDeployer exactly, using the same creation bytecode the
  * factory deploys (exported from the build by
- * contracts/script/export-vanity-artifacts.py).
+ * contracts/script/export-vanity-artifacts.py). With the bonding curve now
+ * living inside the launch's own V4 pool there is no second contract to
+ * derive, so the initcode hash is constant per launch and each candidate is
+ * a single CREATE2 hash.
  *
  * Two guard rails make drift inert rather than dangerous:
  *  - the create page verifies the winning salt against the deployer's own
- *    `predictLaunchAddresses` before launching, and falls back to a random
+ *    `predictLaunchAddress` before launching, and falls back to a random
  *    salt on mismatch;
  *  - the launch's economics pin means a launch lands exactly as predicted or
  *    reverts, never somewhere else.
@@ -20,28 +22,13 @@
  * (contracts/test/unit/VanityFixture.t.sol), so the two implementations are
  * cross-checked on every test run.
  */
-import {
-  concat,
-  encodeAbiParameters,
-  getCreate2Address,
-  hexToBytes,
-  keccak256,
-  toBytes,
-  toHex,
-} from "viem";
+import { concat, encodeAbiParameters, getCreate2Address, keccak256, toHex } from "viem";
 
-import {
-  BONDING_CURVE_CREATION,
-  LAUNCH_TOKEN_CREATION,
-  REWARD_TOKEN_CREATION,
-} from "../abis/initcode.ts";
+import { LAUNCH_TOKEN_CREATION, REWARD_TOKEN_CREATION } from "../abis/initcode.ts";
 
 export const VANITY_SUFFIX = "909";
 
 const DEAD = "0x000000000000000000000000000000000000dEaD" as const;
-// Placed where the curve address goes while building the token template, then
-// located by scanning for its 32-byte-padded form. Never a real address.
-const SENTINEL = "0xc0ffee00c0ffee00c0ffee00c0ffee00c0ffee00" as const;
 
 export type Address = `0x${string}`;
 
@@ -52,25 +39,17 @@ export type LaunchInputs = {
   logo: string;
   description: string;
   socials: { twitter: string; telegram: string; discord: string; website: string; farcaster: string };
-  creatorFeeRecipient: Address; // resolved: zero replaced by the launcher
   originalDeployer: Address;
-  creatorFeeBps: number;
   cashback: { mode: number; shareBps: number };
   // Protocol state, read from chain at mining time. The economics pin in the
   // launch transaction guarantees these are still live when it lands.
   quoteToken: Address;
-  protocolFeeRecipient: Address;
-  protocolFeeShareBps: number;
-  feeEscrow: Address;
-  phantomQuote: bigint;
-  curveFeeBps: bigint;
-  graduationThreshold: bigint;
   supply: bigint;
   // Deployment topology.
   launchDeployer: Address;
   rewardTokenDeployer: Address;
   factory: Address;
-  graduationExecutor: Address;
+  hook: Address;
   locker: Address;
   poolManager: Address;
 };
@@ -86,8 +65,6 @@ const SOCIALS_ABI = {
   ],
 } as const;
 
-const CASHBACK_ABI = { type: "tuple", components: [{ type: "uint8" }, { type: "uint16" }] } as const;
-
 function socialsValue(s: LaunchInputs["socials"]) {
   return [s.twitter, s.telegram, s.discord, s.website, s.farcaster] as const;
 }
@@ -99,52 +76,11 @@ export function launchSalt(originalDeployer: Address, seed: `0x${string}`): `0x$
   );
 }
 
-/** The curve's creation code hash; constant across salts for fixed inputs. */
-export function curveInitHash(i: LaunchInputs): `0x${string}` {
-  const args = encodeAbiParameters(
-    [
-      { type: "address" },
-      { type: "address" },
-      { type: "address" },
-      { type: "address" },
-      { type: "uint16" },
-      CASHBACK_ABI,
-      { type: "address" },
-      { type: "uint256" },
-      { type: "uint256" },
-      { type: "uint256" },
-      { type: "uint256" },
-    ],
-    [
-      i.quoteToken,
-      i.creatorFeeRecipient,
-      i.factory,
-      i.protocolFeeRecipient,
-      i.protocolFeeShareBps,
-      [i.cashback.mode, i.cashback.shareBps],
-      i.feeEscrow,
-      i.phantomQuote,
-      i.curveFeeBps,
-      BigInt(i.creatorFeeBps),
-      i.graduationThreshold,
-    ],
-  );
-  return keccak256(concat([BONDING_CURVE_CREATION, args]));
-}
-
-type TokenTemplate = {
-  bytes: Uint8Array;
-  curveOffsets: number[];
-  create2Deployer: Address;
-};
-
 /**
- * Builds the token initcode once with a sentinel where the curve address
- * goes, and records every 32-byte-aligned slot holding it. Per-candidate
- * mining then patches those slots and rehashes, which is what makes the
- * grind cheap enough for the browser.
+ * The token's creation-code hash, constant across salts for fixed inputs,
+ * plus which contract CREATE2-deploys it.
  */
-export function tokenTemplate(i: LaunchInputs): TokenTemplate {
+export function tokenInit(i: LaunchInputs): { hash: `0x${string}`; create2Deployer: Address } {
   const rewards = i.cashback.mode === 3;
   const args = rewards
     ? encodeAbiParameters(
@@ -168,11 +104,11 @@ export function tokenTemplate(i: LaunchInputs): TokenTemplate {
           i.description,
           socialsValue(i.socials),
           i.originalDeployer,
-          SENTINEL,
+          i.factory,
           i.factory,
           i.quoteToken,
           i.supply,
-          [SENTINEL, i.factory, i.graduationExecutor, i.locker, i.poolManager, DEAD],
+          [i.factory, i.hook, i.locker, i.poolManager, DEAD],
         ],
       )
     : encodeAbiParameters(
@@ -194,61 +130,34 @@ export function tokenTemplate(i: LaunchInputs): TokenTemplate {
           i.description,
           socialsValue(i.socials),
           i.originalDeployer,
-          SENTINEL,
+          i.factory,
           i.factory,
           i.supply,
         ],
       );
 
-  const code = hexToBytes(rewards ? REWARD_TOKEN_CREATION : LAUNCH_TOKEN_CREATION);
-  const argBytes = hexToBytes(args);
-  const bytes = new Uint8Array(code.length + argBytes.length);
-  bytes.set(code);
-  bytes.set(argBytes, code.length);
-
-  // The sentinel appears as the low 20 bytes of a zero-padded word.
-  const padded = hexToBytes(("0x" + "00".repeat(12) + SENTINEL.slice(2)) as `0x${string}`);
-  const curveOffsets: number[] = [];
-  for (let o = code.length; o + 32 <= bytes.length; o += 32) {
-    let match = true;
-    for (let j = 0; j < 32; j++) {
-      if (bytes[o + j] !== padded[j]) {
-        match = false;
-        break;
-      }
-    }
-    if (match) curveOffsets.push(o + 12);
-  }
-  if (curveOffsets.length !== (rewards ? 2 : 1)) {
-    throw new Error(`vanity: expected ${rewards ? 2 : 1} curve slots, found ${curveOffsets.length}`);
-  }
-  return { bytes, curveOffsets, create2Deployer: rewards ? i.rewardTokenDeployer : i.launchDeployer };
+  const creation = rewards ? REWARD_TOKEN_CREATION : LAUNCH_TOKEN_CREATION;
+  return {
+    hash: keccak256(concat([creation, args])),
+    create2Deployer: rewards ? i.rewardTokenDeployer : i.launchDeployer,
+  };
 }
 
-/** Predicts (curve, token) for one seed, exactly as the deployer would. */
+/** Predicts the token address for one seed, exactly as the deployer would. */
 export function predict(
   i: LaunchInputs,
-  template: TokenTemplate,
-  curveHash: `0x${string}`,
+  init: { hash: `0x${string}`; create2Deployer: Address },
   seed: `0x${string}`,
-): { salt: `0x${string}`; curve: Address; token: Address } {
+): { salt: `0x${string}`; token: Address } {
   const salt = launchSalt(i.originalDeployer, seed);
-  const curve = getCreate2Address({ from: i.launchDeployer, salt, bytecodeHash: curveHash });
-  const curveBytes = hexToBytes(curve);
-  for (const o of template.curveOffsets) template.bytes.set(curveBytes, o);
-  const token = getCreate2Address({
-    from: template.create2Deployer,
-    salt,
-    bytecodeHash: keccak256(template.bytes),
-  });
-  return { salt, curve, token };
+  const token = getCreate2Address({ from: init.create2Deployer, salt, bytecodeHash: init.hash });
+  return { salt, token };
 }
 
 export type MineResult = {
   seed: `0x${string}`;
   salt: `0x${string}`;
   token: Address;
-  curve: Address;
   iterations: number;
 };
 
@@ -266,26 +175,25 @@ export async function mineVanitySalt(
   } = {},
 ): Promise<MineResult | null> {
   const suffix = (opts.suffix ?? VANITY_SUFFIX).toLowerCase();
-  const maxIterations = opts.maxIterations ?? 40_000;
-  const template = tokenTemplate(i);
-  const curveHash = curveInitHash(i);
+  const maxIterations = opts.maxIterations ?? 200_000;
+  const init = tokenInit(i);
   const base = opts.entropy ?? toHex(crypto.getRandomValues(new Uint8Array(32)));
 
   for (let n = 0; n < maxIterations; n++) {
     const seed = keccak256(concat([base, toHex(n, { size: 8 })]));
-    const candidate = predict(i, template, curveHash, seed);
+    const candidate = predict(i, init, seed);
     if (candidate.token.toLowerCase().endsWith(suffix)) {
       return { seed, ...candidate, iterations: n + 1 };
     }
-    if ((n & 0xff) === 0xff) {
+    if (n % 500 === 499) {
       opts.onProgress?.(n + 1);
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
   return null;
 }
 
-/** Non-mined fallback salt, used when mining or verification fails. */
+/** A cryptographically random seed for the no-vanity fallback. */
 export function randomSeed(): `0x${string}` {
-  return keccak256(toBytes(`${Date.now()}-${Math.random()}`));
+  return toHex(crypto.getRandomValues(new Uint8Array(32)));
 }

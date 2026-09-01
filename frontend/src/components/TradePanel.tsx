@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatUnits, maxUint256, parseUnits } from "viem";
 import {
   useAccount,
+  useBalance,
   usePublicClient,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
 
-import { PopBondingCurveAbi } from "@/abis/PopBondingCurve";
-import { PopLaunchTokenAbi } from "@/abis/PopLaunchToken";
-import { explorerTx } from "@/lib/addresses";
+import { PopSwapRouterAbi } from "@/abis/PopSwapRouter";
+import { ADDRESSES, explorerTx } from "@/lib/addresses";
 import { feeOverrides } from "@/lib/fees";
 import { fmtAmount } from "@/lib/format";
 import type { Launch, Quote } from "@/lib/indexer";
@@ -42,10 +42,14 @@ const erc20Abi = [
 ] as const;
 
 /**
- * Buy/sell panel against the bonding curve. Approvals are exact-amount by
- * default; "unlimited" is an explicit opt-in, never the default. Every
- * trade carries a deadline and a minOut derived from the on-chain quote and
- * the user's slippage setting.
+ * Buy/sell panel: plain ETH in, plain ETH out, whatever phase the launch is
+ * in. Both phases route through PopSwapRouter (the same public entry point
+ * bots use), which trades the WETH curve pool pre-bond and routes through
+ * the quote conversion into the bonded pool afterwards. Buys need no
+ * approvals at all; sells approve the launch token to the router,
+ * exact-amount by default. The expected output is a live simulation of the
+ * exact call about to be sent, so the preview can never use different math
+ * than the trade.
  */
 export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Quote | null }) {
   const { address: account } = useAccount();
@@ -56,63 +60,85 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
   const [unlimitedApproval, setUnlimitedApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingLabel, setPendingLabel] = useState<string | null>(null);
+  const [expectedOut, setExpectedOut] = useState<bigint>(0n);
 
-  const quoteDecimals = quoteInfo?.decimals ?? 18;
-  const quoteSymbol = quoteInfo?.symbol ?? "QUOTE";
-  const graduated = launch.phase !== 0;
+  const bonded = launch.phase === 1;
+  const quoteSymbol = quoteInfo?.symbol ?? "quote";
 
-  const inToken = side === "buy" ? launch.quoteToken : launch.token;
-  const inDecimals = side === "buy" ? quoteDecimals : 18;
   const parsedAmount = useMemo(() => {
     try {
-      return amount ? parseUnits(amount, inDecimals) : 0n;
+      return amount ? parseUnits(amount, 18) : 0n;
     } catch {
       return 0n;
     }
-  }, [amount, inDecimals]);
+  }, [amount]);
 
-  const { data: balance } = useReadContract({
+  const { data: ethBalance } = useBalance({
+    address: account,
+    query: { enabled: !!account, refetchInterval: 5_000 },
+  });
+  const { data: tokenBalance } = useReadContract({
     abi: erc20Abi,
-    address: inToken,
+    address: launch.token,
     functionName: "balanceOf",
     args: account ? [account] : undefined,
     query: { enabled: !!account, refetchInterval: 5_000 },
   });
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     abi: erc20Abi,
-    address: inToken,
+    address: launch.token,
     functionName: "allowance",
-    args: account ? [account, launch.curve] : undefined,
+    args: account ? [account, ADDRESSES.swapRouter] : undefined,
     query: { enabled: !!account, refetchInterval: 5_000 },
   });
 
-  // Live on-chain quote for the expected output.
-  const { data: reserves } = useReadContract({
-    abi: PopBondingCurveAbi,
-    address: launch.curve,
-    functionName: "getReserves",
-    query: { refetchInterval: 4_000, enabled: !graduated },
-  });
-  const { data: sellable } = useReadContract({
-    abi: PopBondingCurveAbi,
-    address: launch.curve,
-    functionName: "sellableTokens",
-    query: { refetchInterval: 4_000, enabled: !graduated },
-  });
-  const expectedOut = useMemo(() => {
-    if (!reserves || parsedAmount === 0n) return 0n;
-    const [quoteReserve, tokenReserve] = reserves;
-    const feeBps = 100n + BigInt(launch.creatorFeeBps); // base fee + creator fee on the quote leg
-    if (side === "buy") {
-      const net = parsedAmount - (parsedAmount * feeBps) / 10_000n;
-      return (net * tokenReserve) / (quoteReserve + net);
+  const balance = side === "buy" ? ethBalance?.value : tokenBalance;
+  const needsApproval =
+    side === "sell" && allowance !== undefined && parsedAmount > 0n && allowance < parsedAmount;
+
+  // Live preview: simulate the exact router call. A sell preview needs the
+  // allowance in place; until then the preview shows zero and the approve
+  // button leads.
+  useEffect(() => {
+    let cancelled = false;
+    async function quoteIt() {
+      if (!publicClient || parsedAmount === 0n) {
+        setExpectedOut(0n);
+        return;
+      }
+      try {
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
+        const sim =
+          side === "buy"
+            ? await publicClient.simulateContract({
+                abi: PopSwapRouterAbi,
+                address: ADDRESSES.swapRouter,
+                functionName: "buyWithEth",
+                args: [launch.token, 0n, deadline],
+                value: parsedAmount,
+                account,
+              })
+            : await publicClient.simulateContract({
+                abi: PopSwapRouterAbi,
+                address: ADDRESSES.swapRouter,
+                functionName: "sellForEth",
+                args: [launch.token, parsedAmount, 0n, deadline],
+                account,
+              });
+        if (!cancelled) setExpectedOut(sim.result as bigint);
+      } catch {
+        if (!cancelled) setExpectedOut(0n);
+      }
     }
-    const gross = (parsedAmount * quoteReserve) / (tokenReserve + parsedAmount);
-    return gross - (gross * feeBps) / 10_000n;
-  }, [reserves, parsedAmount, side, launch.creatorFeeBps]);
+    quoteIt();
+    const t = setInterval(quoteIt, 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [publicClient, parsedAmount, side, launch.token, account, allowance]);
 
   const minOut = expectedOut - (expectedOut * BigInt(slippageBps)) / 10_000n;
-  const needsApproval = allowance !== undefined && parsedAmount > 0n && allowance < parsedAmount;
 
   const { writeContractAsync } = useWriteContract();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
@@ -138,9 +164,9 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
     run("Approving…", async () =>
       writeContractAsync({
         abi: erc20Abi,
-        address: inToken,
+        address: launch.token,
         functionName: "approve",
-        args: [launch.curve, unlimitedApproval ? maxUint256 : parsedAmount],
+        args: [ADDRESSES.swapRouter, unlimitedApproval ? maxUint256 : parsedAmount],
         ...(await feeOverrides(publicClient)),
       }),
     );
@@ -148,36 +174,34 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
   const trade = () =>
     run(side === "buy" ? "Buying…" : "Selling…", async () => {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
-      // A buy that completes the curve triggers graduation inside the same
-      // transaction, wrapped in try/catch. Wallet gas estimates do not cover
-      // that branch, so give crossing buys generous headroom to keep the
-      // atomic graduation from being gas-starved (it stays permissionlessly
-      // retryable either way).
-      let gas: bigint | undefined;
-      if (side === "buy" && sellable !== undefined && sellable > 0n && expectedOut >= (sellable * 95n) / 100n) {
-        gas = 2_500_000n;
+      const bounded = minOut > 0n ? minOut : 0n;
+      if (side === "buy") {
+        return writeContractAsync({
+          abi: PopSwapRouterAbi,
+          address: ADDRESSES.swapRouter,
+          functionName: "buyWithEth",
+          args: [launch.token, bounded, deadline],
+          value: parsedAmount,
+          ...(await feeOverrides(publicClient)),
+        });
       }
       return writeContractAsync({
-        abi: PopBondingCurveAbi,
-        address: launch.curve,
-        functionName: side,
-        args: [parsedAmount, minOut < 0n ? 0n : minOut, account!, deadline],
-        gas,
+        abi: PopSwapRouterAbi,
+        address: ADDRESSES.swapRouter,
+        functionName: "sellForEth",
+        args: [launch.token, parsedAmount, bounded, deadline],
         ...(await feeOverrides(publicClient)),
       });
     });
 
-  if (graduated) {
-    return (
-      <div className="card p-4 text-sm text-dim">
-        This token has graduated. Trade it on the Uniswap V4 pool. The curve is closed forever and its
-        liquidity is locked.
-      </div>
-    );
-  }
-
   return (
     <div className="card p-4">
+      {bonded && (
+        <div className="mb-3 rounded-lg bg-up/10 px-3 py-2 text-[11px] leading-relaxed text-dim">
+          Bonded: this token now trades against {quoteSymbol} in its locked pool. ETH buys route
+          through {quoteSymbol} automatically, every one a {quoteSymbol} market buy.
+        </div>
+      )}
       <div className="mb-3 grid grid-cols-2 gap-1 rounded-field bg-bg p-1">
         {(["buy", "sell"] as const).map((s) => (
           <button
@@ -197,13 +221,10 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
       </div>
 
       <label className="label">
-        {side === "buy" ? `Spend (${quoteSymbol})` : `Sell (${launch.symbol})`}
+        {side === "buy" ? "Spend (ETH)" : `Sell (${launch.symbol})`}
         {balance !== undefined && (
-          <button
-            className="float-right text-pop"
-            onClick={() => setAmount(formatUnits(balance, inDecimals))}
-          >
-            max {fmtAmount(balance, inDecimals)}
+          <button className="float-right text-pop" onClick={() => setAmount(formatUnits(balance, 18))}>
+            max {fmtAmount(balance, 18)}
           </button>
         )}
       </label>
@@ -219,13 +240,12 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
         <div className="flex justify-between">
           <span>Expected</span>
           <span className="text-ink">
-            {fmtAmount(expectedOut, side === "buy" ? 18 : quoteDecimals)}{" "}
-            {side === "buy" ? launch.symbol : quoteSymbol}
+            {fmtAmount(expectedOut, 18)} {side === "buy" ? launch.symbol : "ETH"}
           </span>
         </div>
         <div className="flex justify-between">
           <span>Min after slippage</span>
-          <span>{fmtAmount(minOut > 0n ? minOut : 0n, side === "buy" ? 18 : quoteDecimals)}</span>
+          <span>{fmtAmount(minOut > 0n ? minOut : 0n, 18)}</span>
         </div>
         <div className="flex items-center justify-between">
           <span>Slippage</span>
@@ -246,7 +266,7 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
       {needsApproval ? (
         <>
           <button className="btn-pop mt-4 w-full" disabled={!!pendingLabel || !account} onClick={approve}>
-            {pendingLabel ?? `Approve ${side === "buy" ? quoteSymbol : launch.symbol}`}
+            {pendingLabel ?? `Approve ${launch.symbol}`}
           </button>
           <label className="mt-2 flex items-center gap-2 text-[11px] text-dim">
             <input

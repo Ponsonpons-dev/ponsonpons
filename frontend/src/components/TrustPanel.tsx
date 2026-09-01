@@ -12,7 +12,22 @@ import type { Launch } from "@/lib/indexer";
 export function TrustPanel({ launch }: { launch: Launch }) {
   const rows: Array<{ label: string; value: React.ReactNode }> = [
     { label: "Token contract (verified)", value: <AddressLink address={launch.token} /> },
-    { label: "Bonding curve (verified)", value: <AddressLink address={launch.curve} /> },
+    {
+      label: "Trading venue",
+      value: (
+        <span>
+          Real Uniswap V4 pool from block one:{" "}
+          <a
+            className="text-pop hover:underline"
+            href={explorerAddress(ADDRESSES.poolManager)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            canonical PoolManager ↗
+          </a>
+        </span>
+      ),
+    },
     {
       label: "Admin powers over this launch",
       value: <span className="font-bold text-up">None</span>,
@@ -31,7 +46,7 @@ export function TrustPanel({ launch }: { launch: Launch }) {
     },
   ];
 
-  if (launch.phase === 2) {
+  if (launch.phase === 1) {
     rows.push(
       {
         label: "Liquidity",
@@ -52,13 +67,18 @@ export function TrustPanel({ launch }: { launch: Launch }) {
       },
       {
         label: "Supply never in circulation",
-        value: <span>{(Number(launch.lockedSupplyExcess) / 1e18 / 1e6).toFixed(1)}M locked at graduation</span>,
+        value: <span>{(Number(launch.lockedSupplyExcess) / 1e18 / 1e6).toFixed(1)}M locked at the bond</span>,
       },
     );
   } else {
     rows.push({
-      label: "At graduation",
-      value: <span>Entire pool position mints directly into the locker: no migration step, no window</span>,
+      label: "At the bond",
+      value: (
+        <span>
+          The whole ETH raise market-buys the quote and the new pool's position mints directly into
+          the locker: no migration step, no window
+        </span>
+      ),
     });
   }
 

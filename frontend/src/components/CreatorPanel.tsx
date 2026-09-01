@@ -29,6 +29,14 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
     args: account ? [account, launch.quoteToken] : undefined,
     query: { enabled: isCreator, refetchInterval: 8_000 },
   });
+  // Curve-phase creator fees accrue in WETH; bonded-phase fees in the quote.
+  const { data: claimableWeth, refetch: refetchWeth } = useReadContract({
+    abi: PopFeeEscrowAbi,
+    address: ADDRESSES.feeEscrow,
+    functionName: "balanceOfToken",
+    args: account ? [account, ADDRESSES.weth] : undefined,
+    query: { enabled: isCreator, refetchInterval: 8_000 },
+  });
 
   if (!isCreator) return null;
 
@@ -39,6 +47,7 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
       const hash = await fn();
       await publicClient?.waitForTransactionReceipt({ hash });
       await refetch();
+      await refetchWeth();
     } catch (e) {
       setError((e instanceof Error ? e.message : String(e)).split("\n")[0]?.slice(0, 160) ?? "failed");
     } finally {
@@ -49,29 +58,54 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
   return (
     <div className="card border-pop/30 p-4">
       <div className="mb-2 text-sm font-bold text-pop">Creator panel</div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-dim">Claimable fees (all your launches in this quote)</span>
-        <span className="font-semibold">
-          {fmtAmount(claimable, quoteInfo?.decimals ?? 18)} {quoteInfo?.symbol}
-        </span>
+      <div className="space-y-1 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-dim">Claimable curve-phase fees (ETH)</span>
+          <span className="font-semibold">{fmtAmount(claimableWeth, 18)} WETH</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-dim">Claimable bonded-phase fees</span>
+          <span className="font-semibold">
+            {fmtAmount(claimable, quoteInfo?.decimals ?? 18)} {quoteInfo?.symbol}
+          </span>
+        </div>
       </div>
-      <button
-        className="btn-pop mt-3 w-full"
-        disabled={busy || !claimable}
-        onClick={() =>
-          act(async () =>
-            writeContractAsync({
-              abi: PopFeeEscrowAbi,
-              address: ADDRESSES.feeEscrow,
-              functionName: "claimToken",
-              args: [launch.quoteToken],
-              ...(await feeOverrides(publicClient)),
-            }),
-          )
-        }
-      >
-        {busy ? "Working…" : "Claim fees"}
-      </button>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          className="btn-pop"
+          disabled={busy || !claimableWeth}
+          onClick={() =>
+            act(async () =>
+              writeContractAsync({
+                abi: PopFeeEscrowAbi,
+                address: ADDRESSES.feeEscrow,
+                functionName: "claimToken",
+                args: [ADDRESSES.weth],
+                ...(await feeOverrides(publicClient)),
+              }),
+            )
+          }
+        >
+          {busy ? "Working…" : "Claim WETH"}
+        </button>
+        <button
+          className="btn-pop"
+          disabled={busy || !claimable}
+          onClick={() =>
+            act(async () =>
+              writeContractAsync({
+                abi: PopFeeEscrowAbi,
+                address: ADDRESSES.feeEscrow,
+                functionName: "claimToken",
+                args: [launch.quoteToken],
+                ...(await feeOverrides(publicClient)),
+              }),
+            )
+          }
+        >
+          {busy ? "Working…" : `Claim ${quoteInfo?.symbol ?? "quote"}`}
+        </button>
+      </div>
 
       <div className="mt-4 border-t border-edge pt-3">
         <label className="label">Transfer fee recipient (irreversible, no recovery exists)</label>

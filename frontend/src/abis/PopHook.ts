@@ -836,6 +836,25 @@ export const PopHookAbi = [
  },
  {
   "type": "function",
+  "name": "collectBondCashback",
+  "inputs": [
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "internalType": "PoolId"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "currentFeePolicy",
   "inputs": [],
   "outputs": [
@@ -865,6 +884,60 @@ export const PopHookAbi = [
       "internalType": "uint16"
      }
     ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "curveTerms",
+  "inputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "PoolId"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "isCurve",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "retired",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "bondAbove",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "snipeStartBps",
+    "type": "uint16",
+    "internalType": "uint16"
+   },
+   {
+    "name": "snipeWindowSeconds",
+    "type": "uint32",
+    "internalType": "uint32"
+   },
+   {
+    "name": "launchedAt",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "bondReadyAt",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "bondTick",
+    "type": "int24",
+    "internalType": "int24"
    }
   ],
   "stateMutability": "view"
@@ -1108,6 +1181,25 @@ export const PopHookAbi = [
  },
  {
   "type": "function",
+  "name": "pendingBondCashback",
+  "inputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "PoolId"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "pendingCreatorFees",
   "inputs": [
    {
@@ -1205,6 +1297,51 @@ export const PopHookAbi = [
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "registerCurveTerms",
+  "inputs": [
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "internalType": "PoolId"
+   },
+   {
+    "name": "snipe",
+    "type": "tuple",
+    "internalType": "struct SnipeTaxTerms",
+    "components": [
+     {
+      "name": "startBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "windowSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "launchedAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   },
+   {
+    "name": "bondTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "bondAbove",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -1445,6 +1582,38 @@ export const PopHookAbi = [
  },
  {
   "type": "event",
+  "name": "BondCashbackAccrued",
+  "inputs": [
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "PoolId"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "BondReady",
+  "inputs": [
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "PoolId"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "CreatorFeeRecipientUpdated",
   "inputs": [
    {
@@ -1464,6 +1633,19 @@ export const PopHookAbi = [
     "type": "address",
     "indexed": true,
     "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "CurvePoolRetired",
+  "inputs": [
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "PoolId"
    }
   ],
   "anonymous": false
@@ -1722,6 +1904,31 @@ export const PopHookAbi = [
     "type": "address",
     "indexed": false,
     "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "SnipeTaxCharged",
+  "inputs": [
+   {
+    "name": "poolId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "PoolId"
+   },
+   {
+    "name": "currency",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
    }
   ],
   "anonymous": false

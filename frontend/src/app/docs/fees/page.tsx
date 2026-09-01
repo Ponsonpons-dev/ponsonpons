@@ -5,8 +5,10 @@ export default function FeesDoc() {
     <>
       <h1 className="text-[26px] font-extrabold tracking-[-0.8px]">Fees &amp; cashback</h1>
       <p className="mt-2">
-        Every trade pays a fee on its quote leg, in both directions. The total is the same before and
-        after graduation, and it is fixed for the life of a launch.
+        Every trade pays a fee, in both directions, taken by the hook on the swap itself. The total is
+        the same before and after the bond, and it is fixed for the life of a launch. While a token is
+        on its ETH curve, fees accrue in WETH and creators claim ETH; after the bond they are in the
+        quote token.
       </p>
 
       <h2>The split</h2>
@@ -41,14 +43,14 @@ export default function FeesDoc() {
         charge to traders. A launch with 100% cashback and one with 0% cost a trader exactly the same.
       </p>
       <p>
-        There is also a flat ETH launch fee paid once at creation, and an anti-snipe tax that applies
-        only in the opening seconds (it flows into the same split, so it funds the creator and their
-        cashback mode rather than disappearing).
+        There is also a flat 0.0005 ETH launch fee paid once at creation, and an anti-snipe tax that
+        applies only in the opening seconds (it flows into the same split, so it funds the creator and
+        their cashback mode rather than disappearing).
       </p>
 
       <h2>Worked example: $100 traded on any token</h2>
       <p>
-        The default launch: no extra creator fee. Total fee: <strong>1% of the quote leg</strong>,
+        The default launch: no extra creator fee. Total fee: <strong>1% of the trade</strong>,
         the same price as trading on Pons itself.
       </p>
       <table>
@@ -77,10 +79,11 @@ export default function FeesDoc() {
       <h2>Where the protocol&apos;s share goes: $POP holders included</h2>
       <p>
         The protocol&apos;s half of the base fee does not go to a wallet. It accrues to an on-chain{" "}
-        <strong>revenue splitter</strong> that anyone can trigger, and the splitter pays{" "}
-        <strong>15% of it to $POP holders</strong>, in $PONS, pro-rata by balance, with no staking and
-        no claim portal; the remainder goes to the protocol. Holding $POP is a share of the fee stream
-        of every token on the platform.
+        <strong>revenue splitter</strong> that anyone can trigger. Revenue that arrives in WETH is
+        market-bought into $PONS first, which makes distribution itself another public $PONS buy, and
+        the splitter then pays <strong>15% of it to $POP holders</strong>, in $PONS, pro-rata by
+        balance, with no staking and no claim portal; the remainder goes to the protocol. Holding $POP
+        is a share of the fee stream of every token on the platform.
       </p>
       <p>
         Per $100 traded on <em>any</em> token: $0.425 to the protocol, $0.075 to $POP holders.
@@ -103,40 +106,30 @@ export default function FeesDoc() {
         anything but burned $POP.
       </p>
 
-      <h2>The four cashback modes</h2>
+      <h2>The three cashback modes</h2>
 
       <h3>None</h3>
       <p>The creator keeps their whole take. Simple, and the right default if you are unsure.</p>
 
-      <h3>Trader rebate</h3>
-      <p>
-        A share of the creator&apos;s take is credited back to whoever made the trade, in the quote
-        token, in the same transaction. It lands as a claimable balance you withdraw whenever.
-      </p>
-      <p>
-        <strong>Caveat worth knowing:</strong> this only runs while the token is on its curve. After
-        graduation, trades arrive through a router, so the contract can no longer tell who the human
-        trader was, that share reverts to the creator. This is disclosed at creation and shown on the
-        token page rather than buried.
-      </p>
-
       <h3>Quote burn</h3>
       <p>
-        A share is sent to the dead address, in the quote token, permanently reducing its supply. Runs
-        before and after graduation, for the life of the token.
+        A share is sent to the dead address, in the bond quote, permanently reducing its supply. It runs
+        for the life of the token: during the ETH curve phase the carve-out accrues in WETH and is
+        converted and burned at the bond, and after that every sweep burns the quote directly.
       </p>
       <p>
-        This mode needs no swap, no price oracle and no operator, because the fee is <em>already</em> the
-        quote token, so burning it is a single transfer. It is the cleanest of the modes mechanically, and
-        the one that gives a quote token&apos;s community a direct reason to want your launch to
-        succeed.
+        Post-bond this mode needs no swap and no price oracle, because the fee is <em>already</em> the
+        quote token, so burning it is a single transfer. It is the mode that gives a quote token&apos;s
+        community a direct reason to want your launch to succeed.
       </p>
 
       <h3>Holder rewards</h3>
       <p>
         A share is distributed continuously to everyone holding your token, pro-rata by balance, in the
-        quote token. No staking, no snapshots, no claim windows, no operator publishing anything. Hold
-        the token, accrue rewards, claim whenever.
+        bond quote. During the ETH phase it accrues in WETH and converts at the bond; after that it is
+        pushed to the token contract, which distributes it as trading happens. No staking, no snapshots,
+        no claim windows, no operator publishing anything. Hold the token, accrue rewards, claim
+        whenever.
       </p>
       <p>
         <strong>The tradeoff to understand:</strong> rewards can only be split by how much you held and
@@ -147,9 +140,9 @@ export default function FeesDoc() {
         inert token. Transfers of a rewards token cost somewhat more gas.
       </p>
       <p>
-        Contracts that structurally hold supply (the bonding curve, the pool, the locker) are excluded
-        from earning, so rewards go to real holders instead of being stranded in machinery. That
-        exclusion list is fixed when the token is created and can never be edited.
+        Contracts that structurally hold supply (the pool, the locker, the factory holding the curve
+        position) are excluded from earning, so rewards go to real holders instead of being stranded in
+        machinery. That exclusion list is fixed when the token is created and can never be edited.
       </p>
       <p>
         Anyone can add to the reward pot by sending the quote token to the launch token address. A
@@ -158,10 +151,10 @@ export default function FeesDoc() {
 
       <h2>Claiming</h2>
       <p>
-        All revenue (protocol, creator, and trader rebates) lands in a pull-payment escrow. Holder
-        rewards accrue on the token itself. In both cases you claim on your own schedule; nothing is
-        pushed to you, which is what stops a hostile or broken recipient from being able to wedge
-        trading for everybody else.
+        Protocol and creator revenue lands in a pull-payment escrow, in WETH during the curve phase
+        (creators claim it as ETH) and in the quote token after the bond. Holder rewards accrue on the
+        token itself. In both cases you claim on your own schedule; nothing is pushed to you, which is
+        what stops a hostile or broken recipient from being able to wedge trading for everybody else.
       </p>
       <p>
         Creators claim from the token page or from{" "}

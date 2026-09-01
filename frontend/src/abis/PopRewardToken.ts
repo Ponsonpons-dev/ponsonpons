@@ -60,7 +60,7 @@ export const PopRewardTokenAbi = [
     "internalType": "address"
    },
    {
-    "name": "curve_",
+    "name": "supplyRecipient_",
     "type": "address",
     "internalType": "address"
    },
@@ -220,19 +220,6 @@ export const PopRewardTokenAbi = [
     "name": "",
     "type": "uint256",
     "internalType": "uint256"
-   }
-  ],
-  "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "curve",
-  "inputs": [],
-  "outputs": [
-   {
-    "name": "",
-    "type": "address",
-    "internalType": "address"
    }
   ],
   "stateMutability": "view"
@@ -457,6 +444,19 @@ export const PopRewardTokenAbi = [
     "name": "farcaster",
     "type": "string",
     "internalType": "string"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "supplyRecipient",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
    }
   ],
   "stateMutability": "view"

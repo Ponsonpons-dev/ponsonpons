@@ -1,7 +1,7 @@
 /**
- * Minimal ABI fragments the ...909 vanity miner reads with. Everything the
- * miner needs is derivable from the factory plus the env addresses, so no
- * extra configuration is required.
+ * Minimal ABI fragments the ...909 vanity miner and launch flow read with.
+ * Everything the miner needs is derivable from the factory plus the env
+ * addresses, so no extra configuration is required.
  */
 
 export const FactoryRefsAbi = [
@@ -15,7 +15,6 @@ export const FactoryRefsAbi = [
         type: "tuple",
         components: [
           { name: "supply", type: "uint256" },
-          { name: "curveFeeBps", type: "uint256" },
           { name: "poolFee", type: "uint24" },
           { name: "tickSpacing", type: "int24" },
           { name: "enabled", type: "bool" },
@@ -24,51 +23,29 @@ export const FactoryRefsAbi = [
     ],
   },
   { type: "function", name: "launchDeployer", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "graduationExecutor", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "hook", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "locker", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "poolManager", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-] as const;
-
-export const HookPolicyAbi = [
+  { type: "function", name: "launchFee", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   {
     type: "function",
-    name: "currentFeePolicy",
+    name: "previewLaunchEconomics",
     stateMutability: "view",
-    inputs: [],
-    outputs: [
-      {
-        type: "tuple",
-        components: [
-          { name: "protocolFeeRecipient", type: "address" },
-          { name: "protocolFeeShareBps", type: "uint16" },
-          { name: "hookFeeBps", type: "uint16" },
-          { name: "maxInternalPriceImpactBps", type: "uint16" },
-        ],
-      },
-    ],
+    inputs: [{ type: "uint256" }, { type: "address" }],
+    outputs: [{ type: "bytes32" }],
   },
-] as const;
-
-export const RegistryEconomicsAbi = [
   {
     type: "function",
-    name: "getLaunchEconomics",
+    name: "canLaunch",
     stateMutability: "view",
     inputs: [{ type: "address" }],
-    outputs: [
-      { name: "phantomQuote", type: "uint256" },
-      { name: "graduationThreshold", type: "uint256" },
-      { name: "decimals", type: "uint8" },
-    ],
+    outputs: [{ type: "bool" }],
   },
 ] as const;
 
 const LAUNCH_DEPLOYMENT_COMPONENTS = [
   { name: "quoteToken", type: "address" },
-  { name: "creatorFeeRecipient", type: "address" },
   { name: "originalDeployer", type: "address" },
-  { name: "protocolFeeRecipient", type: "address" },
-  { name: "protocolFeeShareBps", type: "uint16" },
   {
     name: "cashback",
     type: "tuple",
@@ -77,11 +54,6 @@ const LAUNCH_DEPLOYMENT_COMPONENTS = [
       { name: "shareBps", type: "uint16" },
     ],
   },
-  { name: "feeEscrow", type: "address" },
-  { name: "phantomQuote", type: "uint256" },
-  { name: "curveFeeBps", type: "uint256" },
-  { name: "creatorFeeBps", type: "uint256" },
-  { name: "graduationThreshold", type: "uint256" },
   { name: "supply", type: "uint256" },
   { name: "salt", type: "bytes32" },
   { name: "name", type: "string" },
@@ -105,12 +77,9 @@ export const LaunchDeployerAbi = [
   { type: "function", name: "rewardTokenDeployer", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   {
     type: "function",
-    name: "predictLaunchAddresses",
+    name: "predictLaunchAddress",
     stateMutability: "view",
     inputs: [{ name: "params", type: "tuple", components: LAUNCH_DEPLOYMENT_COMPONENTS }],
-    outputs: [
-      { name: "token", type: "address" },
-      { name: "curve", type: "address" },
-    ],
+    outputs: [{ name: "token", type: "address" }],
   },
 ] as const;

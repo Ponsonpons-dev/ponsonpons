@@ -5,9 +5,9 @@ export default function QuotesDoc() {
     <>
       <h1 className="text-[26px] font-extrabold tracking-[-0.8px]">Quote tokens</h1>
       <p className="mt-2">
-        A quote token is what a launch trades against: the thing buyers spend, fees are collected in,
-        and the graduated pool is paired with. Choosing one is the most consequential decision a creator
-        makes after the token itself.
+        A quote token is what a launch bonds into: the token the entire ETH raise market-buys when the
+        curve fills, the token the bonded pool is paired with, and the token fees arrive in from then
+        on. Choosing one is the most consequential decision a creator makes after the token itself.
       </p>
 
       <h2>What qualifies</h2>
@@ -23,8 +23,9 @@ export default function QuotesDoc() {
           graduated record in those immutable contracts or it does not.
         </li>
         <li>
-          <strong>Its permanently locked liquidity clears a floor.</strong> Measured from the locked
-          position itself, so it cannot be faked with liquidity that can be pulled, or with donations.
+          <strong>Its permanently locked liquidity clears a floor of 25 ETH.</strong> Measured from the
+          locked position itself, so it cannot be faked with liquidity that can be pulled, or with
+          donations.
         </li>
       </ol>
       <p>
@@ -45,27 +46,26 @@ export default function QuotesDoc() {
         delisting.
       </p>
 
-      <h2>How graduation targets are set per quote</h2>
+      <h2>How the bond conversion is priced</h2>
       <p>
-        Every launch aims at roughly the same real-world size, regardless of which token it is priced
-        in. The registry converts an ETH-denominated target into each quote&apos;s own units using that
-        quote&apos;s time-weighted average price from its locked pool.
+        Every launch raises the same amount, 4.2 ETH, regardless of which quote it bonds into, so no
+        conversion is needed while a curve is filling. The conversion happens once, at the bond, when
+        the entire raise market-buys the quote token on its own locked pool.
       </p>
-      <p>Two guards keep that honest:</p>
+      <p>Two guards keep that buy honest:</p>
       <ul>
         <li>
-          <strong>Rate limiting</strong>: a quote&apos;s peg can be refreshed at most once a day, by
-          anyone.
+          <strong>A TWAP bound</strong>: the buy is checked against the quote&apos;s 30-minute
+          time-weighted average price from the same pool.
         </li>
         <li>
-          <strong>Clamping</strong>: a single refresh can move the target at most 2× in either
-          direction.
+          <strong>A slippage cap</strong>: it may fill at most 5% worse than that average, or the bond
+          reverts and can be retried.
         </li>
       </ul>
       <p>
-        And critically: a re-peg only affects <em>future</em> launches. Every launch snapshots its own
-        economics when it is created, so a curve that is already trading can never be repriced
-        underneath its buyers.
+        And critically: every launch snapshots its own economics when it is created, so a curve that is
+        already trading can never be repriced underneath its buyers.
       </p>
 
       <h2>Picking one as a creator</h2>
@@ -76,7 +76,7 @@ export default function QuotesDoc() {
         them, and that is a real reason for them to pay attention.
       </p>
       <p>
-        Each quote page shows launches hosted, graduations, volume, total burned, and total paid out to
+        Each quote page shows launches hosted, bonds, volume, total burned, and total paid out to
         holders. Those numbers are the honest signal.
       </p>
 

@@ -12,7 +12,7 @@ import { TrustPanel } from "@/components/TrustPanel";
 import { AddressLink, EmptyState, ProgressBar, Skeleton, Stat, TokenLogo } from "@/components/ui";
 import { explorerTx } from "@/lib/addresses";
 import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, fmtPrice, shortAddr, timeAgo } from "@/lib/format";
-import { indexer } from "@/lib/indexer";
+import { curveProgress, indexer } from "@/lib/indexer";
 
 export default function TokenPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
@@ -29,7 +29,6 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
     queryFn: () => indexer.trades(address),
     refetchInterval: 4_000,
   });
-  const holdersQ = useQuery({ queryKey: ["holders", address], queryFn: () => indexer.holders(address) });
 
   if (launchQ.isLoading) return <Skeleton className="h-96" />;
   if (!launch) return <EmptyState>Token not found. Is the indexer synced?</EmptyState>;
@@ -37,6 +36,11 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
   const quote = quoteQ.data ?? null;
   const qd = quote?.decimals ?? 18;
   const qs = quote?.symbol ?? "quote";
+  // Pre-bond the venue is the ETH curve pool, so prices and volume are in
+  // ETH; post-bond they are in the bond quote.
+  const live = launch?.phase === 0;
+  const dd = live ? 18 : qd;
+  const ds = live ? "ETH" : qs;
   // Market cap in quote terms = price * supply.
   const mcQuote = (BigInt(launch.lastPriceQuoteWad) * BigInt(launch.supply)) / 10n ** 18n;
 
@@ -83,10 +87,13 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
       </div>
 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-        <Stat label={`Price (${qs})`} value={fmtPrice(launch.lastPriceQuoteWad, qd)} />
-        <Stat label={`MC (${qs})`} value={fmtAmount(mcQuote, qd)} />
-        <Stat label="Holders" value={launch.holderCount} />
-        <Stat label={`Volume (${qs})`} value={fmtAmount(launch.volumeQuote, qd)} />
+        <Stat label={`Price (${ds})`} value={fmtPrice(launch.lastPriceQuoteWad, dd)} />
+        <Stat label={`MC (${ds})`} value={fmtAmount(mcQuote, dd)} />
+        <Stat label="Trades" value={launch.tradeCount} />
+        <Stat
+          label={live ? "Volume (ETH)" : `Volume (${qs})`}
+          value={fmtAmount(live ? launch.volumeEth : launch.volumeQuote, dd)}
+        />
         {launch.cashbackMode === 3 ? (
           <Stat
             label={`Rewards (${qs})`}
@@ -105,13 +112,13 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
       {launch.phase === 0 && (
         <div className="card p-3">
           <div className="mb-1 flex justify-between text-xs">
-            <span className="text-dim">Curve progress toward graduation</span>
-            <span className="font-semibold">{(launch.curveProgressBps / 100).toFixed(1)}%</span>
+            <span className="text-dim">Curve progress toward the bond</span>
+            <span className="font-semibold">{(curveProgress(launch).bps / 100).toFixed(1)}%</span>
           </div>
-          <ProgressBar bps={launch.curveProgressBps} />
+          <ProgressBar bps={curveProgress(launch).bps} />
           <div className="mt-1 text-[11px] text-dim">
-            {fmtAmount(launch.realQuoteReserve, qd)} / {fmtAmount(launch.graduationThreshold, qd)} {qs}{" "}
-            collected. At 100% the pool seeds itself and locks forever.
+            {curveProgress(launch).raisedEth.toFixed(3)} / {curveProgress(launch).thresholdEth.toFixed(2)} ETH
+            raised. At 100% the whole raise market-buys {qs} and the pair moves to it, locked forever.
           </div>
         </div>
       )}
@@ -179,29 +186,6 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
           <CreatorPanel launch={launch} quoteInfo={quote} />
           <TrustPanel launch={launch} />
 
-          <section className="card p-4">
-            <h2 className="mb-2 text-sm font-bold">Top holders</h2>
-            {holdersQ.data?.length ? (
-              <div className="space-y-1 text-xs">
-                {holdersQ.data.slice(0, 15).map((h) => (
-                  <div key={h.account} className="flex justify-between">
-                    <span>
-                      {h.account.toLowerCase() === launch.curve.toLowerCase() ? (
-                        <span className="text-dim">bonding curve</span>
-                      ) : (
-                        <AddressLink address={h.account} label={shortAddr(h.account)} />
-                      )}
-                    </span>
-                    <span className="text-dim">
-                      {((Number(h.balance) / Number(launch.supply)) * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-xs text-dim">None yet</div>
-            )}
-          </section>
         </div>
       </div>
     </div>

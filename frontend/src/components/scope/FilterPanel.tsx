@@ -174,7 +174,7 @@ export function FilterPanel({
           />
         </div>
         <div className="flex gap-2">
-          <NumField label="Min holders" value={filters.minHolders} onChange={(v) => set("minHolders", v)} />
+          <NumField label="Min trades" value={filters.minTrades} onChange={(v) => set("minTrades", v)} />
           <NumField
             label="Min volume"
             value={filters.minVolume}

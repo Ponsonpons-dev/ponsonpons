@@ -28,8 +28,9 @@ export default function PonscopeDoc() {
               <strong>Filling</strong>
             </td>
             <td>
-              Live launches ordered by how close the curve is to its threshold, fullest first. Ships with
-              a 50% floor. This is where you watch for imminent graduations.
+              Live launches ordered by how close the curve is to its 4.2 ETH threshold, fullest first.
+              Ships with a 50% floor. This is where you watch for imminent bonds, each of which is a
+              public market buy of its quote token.
             </td>
           </tr>
           <tr>
@@ -37,7 +38,7 @@ export default function PonscopeDoc() {
               <strong>Graduated</strong>
             </td>
             <td>
-              Launches that have completed and seeded their locked Uniswap V4 pool, most recent first.
+              Launches that have bonded and seeded their locked token/quote pool, most recent first.
               Sourced separately from the other two so it stays complete no matter how busy the chain is.
             </td>
           </tr>
@@ -55,19 +56,19 @@ export default function PonscopeDoc() {
           <strong>Search</strong>: matches the token name or its ticker, case-insensitively.
         </li>
         <li>
-          <strong>Quote token</strong>: restrict to launches priced in specific quotes. Selecting none
-          means any.
+          <strong>Quote token</strong>: restrict to launches bonding into specific quotes. Selecting
+          none means any.
         </li>
         <li>
-          <strong>Cashback</strong>: filter by what a launch gives back: nothing, trader rebate, quote
-          burn, or holder rewards.
+          <strong>Cashback</strong>: filter by what a launch gives back: nothing, quote burn, or holder
+          rewards.
         </li>
         <li>
           <strong>Curve min / max</strong>: bonding-curve progress in percent. Use it to find launches in
-          a specific band, e.g. 80 to 99% for ones about to graduate.
+          a specific band, e.g. 80 to 99% for ones about to bond.
         </li>
         <li>
-          <strong>Min holders</strong>: filter out launches nobody is in yet.
+          <strong>Min trades</strong>: filter out launches nobody has traded yet.
         </li>
         <li>
           <strong>Min volume</strong>: denominated in each launch&apos;s own quote token, and read at that
@@ -88,9 +89,9 @@ export default function PonscopeDoc() {
 
       <h2>What the rows show</h2>
       <p>
-        Each row carries the quote token it is priced in, the current price, holder count, cumulative
+        Each row carries the launch&apos;s bond quote, the current price, trade count, cumulative
         volume, an icon for its cashback mode, and, for anything still on the curve, a progress bar
-        toward graduation. Age is measured from creation.
+        toward the bond. Age is measured from creation.
       </p>
       <p className="text-xs text-dim">
         Ponscope reads the same public indexer as the rest of the site, so anything you can see here you can

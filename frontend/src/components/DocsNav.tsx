@@ -18,7 +18,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
     items: [
       { href: "/docs/fees", label: "Fees & cashback" },
       { href: "/docs/quotes", label: "Quote tokens" },
-      { href: "/docs/graduation", label: "Graduation" },
+      { href: "/docs/graduation", label: "Bonding" },
     ],
   },
   {

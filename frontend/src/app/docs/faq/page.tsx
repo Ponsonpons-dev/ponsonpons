@@ -5,10 +5,11 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "Why would I launch here instead of on a normal ETH launchpad?",
     a: (
       <>
-        Because a launch here comes with a built-in audience. Your token is priced in a community&apos;s
-        token, and with quote burn or holder rewards your trading volume is measurably good for that
-        community, which gives them a reason to care that you exist. On an ETH pad you are one of
-        hundreds of tokens competing for the same attention with nothing to offer in return.
+        Because a launch here comes with a built-in audience and zero buying friction. Your curve
+        trades in plain ETH on a real Uniswap pool from its first block, so anyone, and any trading
+        bot, can buy it immediately. And when it bonds, the entire raise market-buys a community&apos;s
+        token and your pair moves to it, so with quote burn or holder rewards your existence is
+        measurably good for that community, which gives them a reason to care that you exist.
       </>
     ),
   },
@@ -16,9 +17,22 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "Do I need $PONS to buy a token here?",
     a: (
       <>
-        You need whatever quote token that specific launch chose, often $PONS, sometimes another
-        graduated token. The token page names it. You can get it on any DEX that trades it on Robinhood
-        Chain.
+        No. You buy with plain ETH, always. Before the bond you are trading the token&apos;s ETH pool
+        directly; after the bond the site&apos;s router converts your ETH through the quote token
+        automatically in the same transaction. The quote token (often $PONS) is what the launch bonds
+        into, not what you need in your wallet.
+      </>
+    ),
+  },
+  {
+    q: "Can I trade launches with my bot (GMGN, Maestro, a custom sniper)?",
+    a: (
+      <>
+        Yes, that is the point of the design. Every launch is a standard Uniswap V4 pool on the
+        canonical PoolManager from its first block, quoted in WETH, so anything that can swap Uniswap
+        V4 on Robinhood Chain can trade it with no launchpad-specific integration. Bot developers who
+        want a one-call ABI can use the swap router instead; see{" "}
+        <Link href="/docs/developers">developers</Link>.
       </>
     ),
   },
@@ -46,18 +60,19 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     a: (
       <>
         For the first few seconds after a launch, buys pay a tax that starts near 100% and decays to
-        zero. It is aimed at bots that front-run the announcement. If you are a human clicking buy after
-        seeing a post, it will be long over. The proceeds are not burned; they flow into the normal fee
-        split.
+        zero, enforced by the pool&apos;s hook whatever router the buy comes through. It is aimed at
+        bots that front-run the announcement. If you are a human clicking buy after seeing a post, it
+        will be long over. The proceeds are not burned; they flow into the normal fee split.
       </>
     ),
   },
   {
-    q: "What happens if nobody finishes graduating a token?",
+    q: "What happens if nobody bonds a full curve?",
     a: (
       <>
-        Anyone can finish it, at any time, forever. A keeper does it automatically within seconds, but
-        the function is permissionless precisely so that nothing depends on the keeper existing.
+        Anyone can bond it, at any time, forever: <code>bond()</code> is a permissionless function. A
+        keeper does it automatically within seconds, but nothing depends on the keeper existing. Until
+        the bond lands, buys stop at the curve&apos;s ceiling and sells keep working normally.
       </>
     ),
   },
@@ -65,7 +80,8 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "How do I get my creator fees?",
     a: (
       <>
-        They accumulate as a claimable balance. Claim them from your token&apos;s page or your creator
+        They accumulate as a claimable balance: in WETH while your token trades on its ETH curve, in
+        the quote token after it bonds. Claim either from your token&apos;s page or your creator
         dashboard at <code>/creator/&lt;your address&gt;</code>. No vesting, no deadline.
       </>
     ),
@@ -74,9 +90,10 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "I hold a token with holder rewards. How do I get paid?",
     a: (
       <>
-        Just hold it. Rewards accrue continuously as people trade, and you claim from the token page
-        whenever you like. There is nothing to stake and no snapshot to be present for. If you sell, you
-        keep everything you earned while holding.
+        Just hold it. Rewards accrue as people trade (curve-phase carve-outs convert to the quote at
+        the bond, pool-phase rewards flow at each sweep), and you claim from the token page whenever
+        you like. There is nothing to stake and no snapshot to be present for. If you sell, you keep
+        everything you earned while holding.
       </>
     ),
   },
@@ -84,8 +101,8 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "Can I get my token listed as a quote token?",
     a: (
       <>
-        If it graduated on Pons and its locked liquidity clears the floor, yes, and you do not need our
-        permission. Listing is a permissionless function anyone can call. See{" "}
+        If it graduated on Pons and its locked liquidity clears the floor, yes, and you do not need
+        our permission. Listing is a permissionless function anyone can call. See{" "}
         <Link href="/docs/quotes">quote tokens</Link>.
       </>
     ),
@@ -128,7 +145,9 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
       <>
         Because it is a share of the whole platform&apos;s fee stream. The protocol&apos;s cut of every
         trade on every token accrues to an on-chain splitter, and 15% of it is distributed to $POP
-        holders in $PONS, pro-rata, automatically, with no staking. On top of that, 25% of $POP&apos;s
+        holders in $PONS, pro-rata, automatically, with no staking (curve-phase revenue arrives in
+        WETH and is market-bought into $PONS before splitting, itself a public $PONS buy). On top of
+        that, 25% of $POP&apos;s
         own creator fees buy $POP on its pool and burn it, a ratio that is immutable in the
         burner&apos;s bytecode. Disclosure: the 15% holder share can be adjusted later on by the
         protocol owner; the 25% burn cannot.

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CASHBACK_ICON, CASHBACK_TONE } from "./icons";
 import { ProgressBar, TokenLogo, TokenTile } from "./ui";
 import { CASHBACK_LABEL, PHASE_LABEL, fmtAmount, fmtPrice, timeAgo } from "@/lib/format";
+import { curveProgress } from "@/lib/indexer";
 import type { Launch, Quote } from "@/lib/indexer";
 
 /** Label above value, in the wide-tracked caps used across the site. */
@@ -112,7 +113,7 @@ export function LaunchCard({
         <Metric label="Price" value={fmtPrice(launch.lastPriceQuoteWad, quoteDecimals)} accent="text-pop" />
         <Metric
           label={live ? "Curve" : "Status"}
-          value={live ? `${(launch.curveProgressBps / 100).toFixed(1)}%` : PHASE_LABEL[launch.phase]}
+          value={live ? `${(curveProgress(launch).bps / 100).toFixed(1)}%` : PHASE_LABEL[launch.phase]}
           align="right"
           accent={live ? "text-ink" : "text-pop"}
         />
@@ -120,7 +121,7 @@ export function LaunchCard({
 
       {live && (
         <div className="mt-3">
-          <ProgressBar bps={launch.curveProgressBps} />
+          <ProgressBar bps={curveProgress(launch).bps} />
         </div>
       )}
 

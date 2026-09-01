@@ -55,20 +55,20 @@ export default function TrustDoc() {
         </p>
       )}
       <ul>
-        <li>Configure terms for <em>future</em> launches (fee recipient, launch fee, curve config).</li>
+        <li>Configure terms for <em>future</em> launches (fee recipient, launch fee, launch config, snipe window).</li>
         <li>
           Add a new quote-origin adapter (append-only, never replacing an existing one, so listed quotes
           keep their verification path forever).
         </li>
         <li>
           Pause <em>new launches</em> on a specific quote token. Never pauses trading, never affects an
-          existing curve or pool.
+          existing launch or pool.
         </li>
         <li>
-          Run two narrowly-scoped rescue paths for quote tokens that turn hostile after listing. Both
-          pay <strong>fixed recipients</strong>: the launch&apos;s own creator and the protocol
-          treasury. The reserve rescue only unlocks after 14 days during which anyone can still
-          complete the graduation. The owner chooses <em>when</em>, never <em>where</em>.
+          Run narrowly-scoped rescue paths for launches or fee balances that get stuck. Every rescue
+          pays <strong>fixed recipients</strong>: the launch&apos;s own creator recipient or the
+          protocol&apos;s. The bond rescue only unlocks after a launch has been bond-ready for 14 days,
+          during which anyone can still bond it. The owner chooses <em>when</em>, never <em>where</em>.
         </li>
         <li>Rotate the fee-sweep operator, which can only trigger fee conversions with a price floor.</li>
         <li>
@@ -95,9 +95,10 @@ export default function TrustDoc() {
 
       <h2>Where the code comes from</h2>
       <p>
-        The curve, graduation and hook mechanics are adapted from the verified, MIT-licensed PonsV2
-        launchpad, which has processed tens of thousands of launches on this chain and is itself derived
-        from an audited codebase. We did not invent the risky parts from scratch.
+        The in-pool bonding curve, bonding, and hook mechanics follow the same pattern as the
+        verified, MIT-licensed PonsV2 launchpad, which has processed tens of thousands of launches on
+        this chain and is itself derived from an audited codebase. We did not invent the risky parts
+        from scratch.
       </p>
       <p>
         What we changed is the trust model, and every departure is documented with its rationale{" "}
@@ -111,8 +112,8 @@ export default function TrustDoc() {
         <Link href="/docs/proof">/proof</Link>, treat this as unaudited code and size your positions
         accordingly. What exists today: a full test suite including adversarial cases (reentrant quote
         tokens, blocklisting quotes, fee-on-transfer quotes, 6- and 8-decimal quotes), property-based
-        invariants, and end-to-end tests against a fork of the live chain using a real graduated token
-        and the real Uniswap deployment.
+        and end-to-end tests against a fork of the live chain, including a real WETH to PONS bond
+        conversion on the real Pons pool and the real Uniswap deployment.
       </p>
       <p>
         Three real bugs were found and fixed by that suite before any of this shipped; they are

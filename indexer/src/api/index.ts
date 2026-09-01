@@ -34,7 +34,8 @@ app.get("/launches/:token/trades", async (c) => {
   return c.json(rows.map(serialize));
 });
 
-// OHLC candles for the chart.
+// OHLC candles for the chart. Rows carry `denom` (0 curve/ETH series,
+// 1 bonded/quote series); the frontend charts one denom at a time.
 app.get("/launches/:token/candles/:interval", async (c) => {
   const token = c.req.param("token").toLowerCase() as `0x${string}`;
   const interval = Number(c.req.param("interval"));
@@ -50,18 +51,6 @@ app.get("/launches/:token/candles/:interval", async (c) => {
 // Quote-token leaderboard: the burn flywheel scoreboard.
 app.get("/quotes", async (c) => {
   const rows = await db.select().from(schema.quote).orderBy(desc(schema.quote.totalBurned));
-  return c.json(rows.map(serialize));
-});
-
-// Top holders for a launch.
-app.get("/launches/:token/holders", async (c) => {
-  const token = c.req.param("token").toLowerCase() as `0x${string}`;
-  const rows = await db
-    .select()
-    .from(schema.holder)
-    .where(eq(schema.holder.token, token))
-    .orderBy(desc(schema.holder.balance))
-    .limit(50);
   return c.json(rows.map(serialize));
 });
 

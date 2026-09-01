@@ -11,8 +11,10 @@ export const ADDRESSES = {
   protocolOwner: addr(process.env.NEXT_PUBLIC_PROTOCOL_OWNER),
   revenueSplitter: addr(process.env.NEXT_PUBLIC_REVENUE_SPLITTER),
   buybackBurner: addr(process.env.NEXT_PUBLIC_BUYBACK_BURNER),
+  swapRouter: addr(process.env.NEXT_PUBLIC_SWAP_ROUTER),
   poolManager: "0x8366a39CC670B4001A1121B8F6A443A643e40951" as `0x${string}`,
   positionManager: "0x58daec3116aae6D93017bAAea7749052E8a04fA7" as `0x${string}`,
+  weth: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73" as `0x${string}`,
 } as const;
 
 /**

@@ -3,7 +3,7 @@
  *
  * The fixture (vanity.fixture.json) is written by the deployer contract
  * itself in contracts/test/unit/VanityFixture.t.sol: the same inputs were
- * fed to `predictLaunchAddresses` on-chain-side, and this suite must derive
+ * fed to `predictLaunchAddress` on-chain-side, and this suite must derive
  * identical addresses from the exported creation bytecode. A mismatch means
  * the TypeScript derivation drifted from the contract and mining would be
  * inert (never wrong: the create page verifies before launching).
@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { curveInitHash, mineVanitySalt, predict, tokenTemplate, type LaunchInputs } from "./vanity.ts";
+import { mineVanitySalt, predict, tokenInit, type LaunchInputs } from "./vanity.ts";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "vanity.fixture.json"), "utf8"));
 
@@ -26,22 +26,14 @@ function inputs(mode: number, shareBps: number): LaunchInputs {
     logo: "ipfs://bafyfixture",
     description: "cross-implementation vanity fixture",
     socials: { twitter: "x.com/pop", telegram: "", discord: "", website: "ponsonpons.com", farcaster: "" },
-    creatorFeeRecipient: fixture.creator,
     originalDeployer: fixture.creator,
-    creatorFeeBps: fixture.creatorFeeBps,
     cashback: { mode, shareBps },
     quoteToken: fixture.quote,
-    protocolFeeRecipient: fixture.protocolFeeRecipient,
-    protocolFeeShareBps: fixture.protocolFeeShareBps,
-    feeEscrow: fixture.feeEscrow,
-    phantomQuote: BigInt(fixture.phantomQuote),
-    curveFeeBps: BigInt(fixture.curveFeeBps),
-    graduationThreshold: BigInt(fixture.graduationThreshold),
     supply: BigInt(fixture.supply),
     launchDeployer: fixture.launchDeployer,
     rewardTokenDeployer: fixture.rewardTokenDeployer,
     factory: fixture.factory,
-    graduationExecutor: fixture.graduationExecutor,
+    hook: fixture.hook,
     locker: fixture.locker,
     poolManager: fixture.poolManager,
   };
@@ -49,15 +41,13 @@ function inputs(mode: number, shareBps: number): LaunchInputs {
 
 test("plain-token derivation matches the deployer contract exactly", () => {
   const i = inputs(0, 0);
-  const p = predict(i, tokenTemplate(i), curveInitHash(i), fixture.salt);
-  assert.equal(p.curve, fixture.expectedPlainCurve);
+  const p = predict(i, tokenInit(i), fixture.salt);
   assert.equal(p.token, fixture.expectedPlainToken);
 });
 
 test("reward-token derivation matches the deployer contract exactly", () => {
   const i = inputs(3, 5000);
-  const p = predict(i, tokenTemplate(i), curveInitHash(i), fixture.salt);
-  assert.equal(p.curve, fixture.expectedRewardCurve);
+  const p = predict(i, tokenInit(i), fixture.salt);
   assert.equal(p.token, fixture.expectedRewardToken);
 });
 
@@ -69,7 +59,7 @@ test("mining finds a salt whose token address carries the suffix", async () => {
   assert.ok(r, "found within budget");
   assert.ok(r.token.toLowerCase().endsWith("9"), r.token);
   // The result must reproduce: same seed, same address.
-  const again = predict(i, tokenTemplate(i), curveInitHash(i), r.seed);
+  const again = predict(i, tokenInit(i), r.seed);
   assert.equal(again.token, r.token);
 });
 

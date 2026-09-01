@@ -5,11 +5,20 @@ import { AddressLink } from "@/components/ui";
 import { ADDRESSES, GOVERNANCE } from "@/lib/addresses";
 
 const CONTRACTS: Array<{ name: string; address: `0x${string}`; note: string }> = [
-  { name: "PopLaunchFactory", address: ADDRESSES.launchFactory, note: "launch + graduation orchestration" },
+  {
+    name: "PopLaunchFactory",
+    address: ADDRESSES.launchFactory,
+    note: "launches, holds each curve position until its bond, executes bonds",
+  },
   { name: "PopQuoteRegistry", address: ADDRESSES.quoteRegistry, note: "permissionless quote allowlist" },
-  { name: "PopHook", address: ADDRESSES.hook, note: "V4 fee hook; policy immutable in bytecode" },
-  { name: "PopLocker", address: ADDRESSES.locker, note: "holds every LP NFT forever; no withdraw function" },
+  { name: "PopHook", address: ADDRESSES.hook, note: "V4 fee hook + snipe tax; policy immutable in bytecode" },
+  { name: "PopLocker", address: ADDRESSES.locker, note: "holds every bonded LP NFT forever; no withdraw function" },
   { name: "PopFeeEscrow", address: ADDRESSES.feeEscrow, note: "pull-payment revenue ledger; no owner" },
+  {
+    name: "PopSwapRouter",
+    address: ADDRESSES.swapRouter,
+    note: "stateless ETH-in/ETH-out convenience router; holds nothing between calls",
+  },
   {
     name: "PopRevenueSplitter",
     address: ADDRESSES.revenueSplitter,
@@ -43,7 +52,7 @@ const CONTRACTS: Array<{ name: string; address: `0x${string}`; note: string }> =
 const CLAIMS: Array<{ claim: string; how: string }> = [
   {
     claim: "Nobody can touch locked liquidity. Not us, not the owner, not anyone.",
-    how: "PopLocker has no withdraw, transfer, or arbitrary-call function. Read the verified source. Every graduated position NFT is minted directly to it.",
+    how: "PopLocker has no withdraw, transfer, or arbitrary-call function. Read the verified source. Every bonded position NFT is minted directly to it.",
   },
   {
     claim: "Nobody can redirect a creator's fees.",
@@ -51,7 +60,11 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
   },
   {
     claim: "Fee terms can never change on a live launch.",
-    how: "Every launch snapshots its economics at creation; the hook's fee policy is a constructor immutable. The registry's re-pegs and the owner's config changes apply to future launches only, never to a launch already live.",
+    how: "Every launch snapshots its economics at creation; the hook's fee policy is a constructor immutable. The owner's config changes apply to future launches only, never to a launch already live.",
+  },
+  {
+    claim: "Pre-bond, the curve's funds have exactly two exits, and neither is a person's wallet.",
+    how: "The factory holds each launch's curve position. Its only paths are bond(), which converts the whole raise into the quote and seeds the locked pool, and a rescue that opens only after a launch has been bond-ready and stuck for 14 days, paying only the launch's own creator fee recipient. During that whole window anyone can still bond it permissionlessly. There is no withdraw-to-anyone function; read the verified source.",
   },
   {
     claim: "The quote allowlist is rules, not opinions.",
@@ -59,11 +72,11 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
   },
   {
     claim: "Launch tokens are inert.",
-    how: "Plain fixed-supply ERC-20: no owner, no mint, no blacklist, no pause, no transfer hooks. Anti-snipe protection is a decaying tax on the curve, not token-level control.",
+    how: "Plain fixed-supply ERC-20: no owner, no mint, no blacklist, no pause, no transfer hooks. Anti-snipe protection is a decaying launch-window tax enforced by the hook, not token-level control.",
   },
   {
-    claim: "Graduation cannot be front-run, griefed, or captured.",
-    how: "The crossing buy itself triggers graduation; both phases are permissionless and retryable; the pool seeds at the curve's terminal price with no swap and no oracle; donations to the curve are ignored by construction.",
+    claim: "Bonding cannot be front-run, griefed, or captured.",
+    how: "Bond-readiness is a price fact recorded by the hook; the bond itself is permissionless, atomic, and retryable. The raise's conversion into the quote is bounded by the quote's own 30-minute TWAP, so a manipulated pool delays a bond rather than repricing it, and the new pool seeds at the curve's terminal price. Every bond is a public market buy of the quote token with the entire raise, visible on-chain.",
   },
   {
     claim: "The only owner powers are config-for-future-launches and constrained rescues.",
@@ -71,11 +84,11 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
       (GOVERNANCE === "timelock"
         ? "Everything is owned by a 48h timelock, so any change is visible on-chain for two days before it can take effect. "
         : "The four ownable contracts are owned directly by the protocol owner, a single key, and its changes take effect immediately with no delay. That is the weakest part of this deployment and we would rather say so than imply a timelock we did not deploy. ") +
-      "What that owner can reach is narrow and worth reading literally: launch configs and the snipe-tax window for FUTURE launches, and two rescue paths for quote tokens that turn hostile after listing. Those rescues pay only fixed recipients, the launch's own creator and the protocol treasury, so there is no address the owner can name. The reserve rescue unlocks only after 14 days, during which anyone can still complete the graduation permissionlessly. It cannot touch locked liquidity, cannot redirect a creator's fees, and cannot change the terms of a launch that already exists.",
+      "What that owner can reach is narrow and worth reading literally: launch configs and the snipe-tax window for FUTURE launches, the $POP holder revenue share on the splitter, and constrained rescue paths for launches or fee balances that get stuck. Every rescue pays only fixed recipients, the launch's own creator recipient or the protocol's, so there is no address the owner can name. The bond rescue unlocks only after a launch has been bond-ready for 14 days, during which anyone can still bond it permissionlessly. It cannot touch locked liquidity, cannot redirect a creator's fees, and cannot change the terms of a launch that already exists.",
   },
   {
     claim: "$POP holders are paid by code, and $POP burns by code.",
-    how: "Protocol fees accrue to the revenue splitter, and anyone can trigger the split: 15% of the PONS goes to the $POP token contract and distributes pro-rata to holders on the spot. The percentage is owner-adjustable, in either direction, and we say so here rather than let you assume it is fixed; what is fixed is that past distributions cannot be clawed back. $POP's creator fees accrue to the buyback burner, whose 25% burn ratio is a constructor constant: that slice can only ever leave the contract as $POP sent to the dead address.",
+    how: "Protocol fees accrue to the revenue splitter, and anyone can trigger the split: 15% goes to the $POP token contract and distributes pro-rata to holders on the spot. Curve-phase revenue arrives in WETH and is market-bought into PONS before splitting, so the holder share covers both phases, and each conversion is itself a public PONS buy. The percentage is owner-adjustable, in either direction, and we say so here rather than let you assume it is fixed; what is fixed is that past distributions cannot be clawed back. $POP's creator fees accrue to the buyback burner, whose 25% burn ratio is a constructor constant: that slice can only ever leave the contract as $POP sent to the dead address.",
   },
   {
     claim: "No proxies. No upgrades. Anywhere.",
@@ -128,8 +141,9 @@ export default function ProofPage() {
           ))}
         </div>
         <p className="mt-2 text-[11px] text-dim">
-          Per-launch curve and token addresses are on each token page's trust panel, all deployed by the
-          factory via CREATE2 and verified from the same source tree.
+          Each token's own address is on its token page's trust panel, deployed by the factory via
+          CREATE2 and verified from the same source tree; its pools live inside the canonical
+          PoolManager.
         </p>
       </section>
 

@@ -7,6 +7,7 @@
  * the indexer nothing. The trade-off is that a column can only ever show what
  * that fetch covered, which is why `SCOPE_FETCH_LIMIT` is generous.
  */
+import { curveProgress } from "./indexer.ts";
 import type { Launch } from "./indexer";
 
 export const SCOPE_FETCH_LIMIT = 200;
@@ -24,7 +25,7 @@ export interface Filters {
   modes: number[];
   minProgress: number | null;
   maxProgress: number | null;
-  minHolders: number | null;
+  minTrades: number | null;
   minVolume: number | null;
   /** Age bounds in minutes. */
   maxAgeMin: number | null;
@@ -39,7 +40,7 @@ export const EMPTY_FILTERS: Filters = {
   modes: [],
   minProgress: null,
   maxProgress: null,
-  minHolders: null,
+  minTrades: null,
   minVolume: null,
   maxAgeMin: null,
   minAgeMin: null,
@@ -86,7 +87,7 @@ export function activeCount(key: ColumnKey, f: Filters): number {
   if (f.quotes.length) n++;
   if (f.modes.length) n++;
   if (f.cashbackOnly !== base.cashbackOnly) n++;
-  for (const k of ["minProgress", "maxProgress", "minHolders", "minVolume", "maxAgeMin", "minAgeMin"] as const) {
+  for (const k of ["minProgress", "maxProgress", "minTrades", "minVolume", "maxAgeMin", "minAgeMin"] as const) {
     if (f[k] !== base[k]) n++;
   }
   return n;
@@ -113,14 +114,19 @@ export function matches(
   if (f.modes.length && !f.modes.includes(launch.cashbackMode)) return false;
   if (f.cashbackOnly && launch.cashbackMode === 0) return false;
 
-  const progress = launch.curveProgressBps / 100;
+  const progress = curveProgress(launch).bps / 100;
   if (f.minProgress !== null && progress < f.minProgress) return false;
   if (f.maxProgress !== null && progress > f.maxProgress) return false;
 
-  if (f.minHolders !== null && launch.holderCount < f.minHolders) return false;
+  if (f.minTrades !== null && launch.tradeCount < f.minTrades) return false;
 
   if (f.minVolume !== null) {
-    if (toNum(launch.volumeQuote, quoteDecimals(launch.quoteToken)) < f.minVolume) return false;
+    // Curve-phase volume accrues in ETH, bonded-phase in the quote; filter
+    // whichever ledger the launch is actually trading on.
+    const vol = launch.phase === 0
+      ? toNum(launch.volumeEth, 18)
+      : toNum(launch.volumeQuote, quoteDecimals(launch.quoteToken));
+    if (vol < f.minVolume) return false;
   }
 
   const ageMin = (now - Number(launch.createdAt)) / 60;
@@ -143,12 +149,12 @@ export function selectColumn(key: ColumnKey, launches: Launch[]): Launch[] {
       return launches
         .filter((l) => l.phase === 0)
         .slice()
-        .sort((a, b) => b.curveProgressBps - a.curveProgressBps);
+        .sort((a, b) => curveProgress(b).bps - curveProgress(a).bps);
     case "graduated":
       return launches
-        .filter((l) => l.phase >= 2)
+        .filter((l) => l.phase === 1)
         .slice()
-        .sort((a, b) => Number(b.graduatedAt ?? b.createdAt) - Number(a.graduatedAt ?? a.createdAt));
+        .sort((a, b) => Number(b.bondedAt ?? b.createdAt) - Number(a.bondedAt ?? a.createdAt));
   }
 }
 

@@ -24,10 +24,24 @@ import {
 const NOW = 1_800_000_000;
 const wad = (n: number) => (BigInt(Math.round(n * 1e6)) * 10n ** 12n).toString();
 
+const PHANTOM = 1.68;
+const THRESHOLD = 4.2;
+const SUPPLY = 1e9;
+
+/**
+ * The last-trade price (WETH per token, wad) that puts the curve at
+ * `progressBps` of its bond. Inverts the same constant-product identity
+ * curveProgress() reads: raised = sqrt(p * phantom * supply) - phantom.
+ */
+function priceAtProgress(progressBps: number): string {
+  const raised = (progressBps / 10_000) * THRESHOLD;
+  const p = ((PHANTOM + raised) * (PHANTOM + raised)) / (PHANTOM * SUPPLY);
+  return BigInt(Math.round(p * 1e18)).toString();
+}
+
 function launch(over: Partial<Launch> = {}): Launch {
   return {
     token: "0xtoken" as `0x${string}`,
-    curve: "0xcurve" as `0x${string}`,
     deployer: "0xdev" as `0x${string}`,
     creatorFeeRecipient: "0xdev" as `0x${string}`,
     quoteToken: "0xAAAA" as `0x${string}`,
@@ -40,27 +54,30 @@ function launch(over: Partial<Launch> = {}): Launch {
     discord: "",
     website: "",
     farcaster: "",
-    supply: wad(1e9),
-    graduationThreshold: wad(4200),
+    supply: wad(SUPPLY),
+    phantomEth: wad(PHANTOM),
+    bondThresholdEth: wad(THRESHOLD),
     creatorFeeBps: 100,
     cashbackMode: 2,
     cashbackShareBps: 5000,
     phase: 0,
     createdAt: String(NOW - 600), // 10 minutes old
-    graduatedAt: null,
-    poolId: null,
+    bondedAt: null,
+    bondReady: false,
+    curvePoolId: "0xpool" as `0x${string}`,
+    bondedPoolId: null,
     positionId: null,
     lockedSupplyExcess: "0",
-    lastPriceQuoteWad: wad(0.000008),
-    realQuoteReserve: wad(3500),
-    curveProgressBps: 8420,
+    ethConverted: null,
+    quoteBought: null,
+    lastPriceQuoteWad: priceAtProgress(8420),
+    volumeEth: wad(2.1),
     volumeQuote: wad(90_000),
     tradeCount: 400,
-    holderCount: 201,
     burnedQuote: wad(450),
     holderRewardsQuote: "0",
     creatorFeesQuote: wad(800),
-    rebatesQuote: "0",
+    creatorFeesEth: "0",
     ...over,
   };
 }
@@ -97,7 +114,7 @@ test("cashbackOnly drops mode 0 and keeps the rest", () => {
 });
 
 test("curve bounds are inclusive and compare in percent, not bps", () => {
-  const l = launch({ curveProgressBps: 8420 }); // 84.2%
+  const l = launch({ lastPriceQuoteWad: priceAtProgress(8420) }); // 84.2%
   assert.equal(matches(l, f({ minProgress: 84 }), NOW, dec), true);
   assert.equal(matches(l, f({ minProgress: 85 }), NOW, dec), false);
   assert.equal(matches(l, f({ maxProgress: 84.2 }), NOW, dec), true);
@@ -105,18 +122,21 @@ test("curve bounds are inclusive and compare in percent, not bps", () => {
   assert.equal(matches(l, f({ minProgress: 50, maxProgress: 90 }), NOW, dec), true);
 });
 
-test("holder and volume floors compare against real values", () => {
-  assert.equal(matches(launch({ holderCount: 201 }), f({ minHolders: 201 }), NOW, dec), true);
-  assert.equal(matches(launch({ holderCount: 200 }), f({ minHolders: 201 }), NOW, dec), false);
-  // volumeQuote is 90,000 once scaled down by the quote's decimals.
-  assert.equal(matches(launch(), f({ minVolume: 90_000 }), NOW, dec), true);
-  assert.equal(matches(launch(), f({ minVolume: 90_001 }), NOW, dec), false);
+test("trade and volume floors compare against real values", () => {
+  assert.equal(matches(launch({ tradeCount: 201 }), f({ minTrades: 201 }), NOW, dec), true);
+  assert.equal(matches(launch({ tradeCount: 200 }), f({ minTrades: 201 }), NOW, dec), false);
+  // A Trading launch's volume ledger is ETH (volumeEth is 2.1 here).
+  assert.equal(matches(launch(), f({ minVolume: 2.1 }), NOW, dec), true);
+  assert.equal(matches(launch(), f({ minVolume: 2.2 }), NOW, dec), false);
+  // A bonded launch's ledger is the quote (volumeQuote is 90,000 here).
+  assert.equal(matches(launch({ phase: 1 }), f({ minVolume: 90_000 }), NOW, dec), true);
+  assert.equal(matches(launch({ phase: 1 }), f({ minVolume: 90_001 }), NOW, dec), false);
 });
 
-test("volume floor respects the quote token's decimals", () => {
+test("volume floor respects the quote token's decimals once bonded", () => {
   // Same raw integer, read as a 6-decimal quote, is a far larger number.
   const sixDec = () => 6;
-  const l = launch({ volumeQuote: (10n ** 12n * 5n).toString() }); // 5e12 raw
+  const l = launch({ phase: 1, volumeQuote: (10n ** 12n * 5n).toString() }); // 5e12 raw
   assert.equal(matches(l, f({ minVolume: 1_000_000 }), NOW, sixDec), true);
   assert.equal(matches(l, f({ minVolume: 1_000_000 }), NOW, dec), false);
 });
@@ -130,24 +150,24 @@ test("age bounds are in minutes and both directions work", () => {
 });
 
 test("filters compose: every clause must pass", () => {
-  const l = launch({ cashbackMode: 2, holderCount: 201, curveProgressBps: 8420 });
-  assert.equal(matches(l, f({ modes: [2], minHolders: 100, minProgress: 80 }), NOW, dec), true);
+  const l = launch({ cashbackMode: 2, tradeCount: 201, lastPriceQuoteWad: priceAtProgress(8420) });
+  assert.equal(matches(l, f({ modes: [2], minTrades: 100, minProgress: 80 }), NOW, dec), true);
   // One failing clause is enough to reject.
-  assert.equal(matches(l, f({ modes: [2], minHolders: 100, minProgress: 90 }), NOW, dec), false);
+  assert.equal(matches(l, f({ modes: [2], minTrades: 100, minProgress: 90 }), NOW, dec), false);
 });
 
 test("a malformed amount is treated as zero rather than throwing", () => {
-  const l = launch({ volumeQuote: "not-a-number" });
+  const l = launch({ volumeEth: "not-a-number" });
   assert.equal(matches(l, f({ minVolume: 1 }), NOW, dec), false);
   assert.equal(matches(l, f(), NOW, dec), true);
 });
 
 test("columns select the right launches and order them meaningfully", () => {
   const all: Launch[] = [
-    launch({ token: "0x1" as `0x${string}`, phase: 0, curveProgressBps: 1000, createdAt: String(NOW - 100) }),
-    launch({ token: "0x2" as `0x${string}`, phase: 0, curveProgressBps: 9000, createdAt: String(NOW - 900) }),
-    launch({ token: "0x3" as `0x${string}`, phase: 2, graduatedAt: String(NOW - 50) }),
-    launch({ token: "0x4" as `0x${string}`, phase: 2, graduatedAt: String(NOW - 500) }),
+    launch({ token: "0x1" as `0x${string}`, phase: 0, lastPriceQuoteWad: priceAtProgress(1000), createdAt: String(NOW - 100) }),
+    launch({ token: "0x2" as `0x${string}`, phase: 0, lastPriceQuoteWad: priceAtProgress(9000), createdAt: String(NOW - 900) }),
+    launch({ token: "0x3" as `0x${string}`, phase: 1, bondedAt: String(NOW - 50) }),
+    launch({ token: "0x4" as `0x${string}`, phase: 1, bondedAt: String(NOW - 500) }),
   ];
 
   // Fresh: live only, newest first.
@@ -169,8 +189,8 @@ test("columns select the right launches and order them meaningfully", () => {
 
 test("selectColumn does not mutate the array it is given", () => {
   const all = [
-    launch({ token: "0x1" as `0x${string}`, curveProgressBps: 100 }),
-    launch({ token: "0x2" as `0x${string}`, curveProgressBps: 9000 }),
+    launch({ token: "0x1" as `0x${string}`, lastPriceQuoteWad: priceAtProgress(100) }),
+    launch({ token: "0x2" as `0x${string}`, lastPriceQuoteWad: priceAtProgress(9000) }),
   ];
   const order = all.map((l) => l.token);
   selectColumn("filling", all);

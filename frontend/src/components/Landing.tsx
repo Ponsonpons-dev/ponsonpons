@@ -1,23 +1,23 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { ArrowRight, Check, Droplet, Flame, Lock, Rebate } from "./icons";
+import { ArrowRight, Check, Droplet, Flame, Lock } from "./icons";
 
 const STEPS = [
   {
     n: "01",
-    title: "Pick a community",
-    body: "Your launch is priced in a graduated Pons token instead of ETH. Buyers spend it, your fees arrive in it, and the pool you graduate into is paired with it.",
+    title: "Launch on a real pool",
+    body: "One transaction creates your token and a live Uniswap V4 pool quoted in ETH. The bonding curve is that pool, so any wallet or bot that can swap Uniswap can trade it from its first block, with nothing launchpad-specific to integrate.",
   },
   {
     n: "02",
-    title: "Decide where your fee goes",
-    body: "Keep it, rebate it to traders, burn it, or pay it to your holders. Whatever you choose is written into the contract at creation and can never be changed, not by you and not by us.",
+    title: "Pick a community",
+    body: "Choose which graduated Pons token your raise buys when the curve fills. Buyers spend plain ETH; the quote you pick is what your launch bonds into, what your pool pairs with, and what your fees arrive in after.",
   },
   {
     n: "03",
-    title: "Graduate into locked liquidity",
-    body: "At the threshold the curve seeds its own Uniswap V4 pool from reserves it already holds. No swap, no migration window, and the position is minted straight into a contract with no way out.",
+    title: "Bond into locked liquidity",
+    body: "At 4.2 ETH the curve closes and the entire raise market-buys your quote token in one public swap. A new pool seeds at the curve's final price, and the position is minted straight into a contract with no way out.",
   },
 ];
 
@@ -28,7 +28,7 @@ const MODES = [
     ring: "group-hover:border-burn/30",
     name: "Quote burn",
     line: "Sends part of every fee to the dead address.",
-    body: "Your volume permanently shrinks the supply of the token you launched on. The community that lent you liquidity gets deflation in exchange.",
+    body: "Your volume permanently shrinks the supply of the token your launch bonds into. The community whose token your raise bought gets deflation in exchange.",
   },
   {
     icon: Droplet,
@@ -36,15 +36,15 @@ const MODES = [
     ring: "group-hover:border-pop/30",
     name: "Holder rewards",
     line: "Pays part of every fee to everyone holding your token.",
-    body: "Pro-rata, continuously, before and after graduation. Nothing to stake, no snapshot to be present for, no operator who could stop paying.",
+    body: "Pro-rata, continuously, before and after the bond. Nothing to stake, no snapshot to be present for, no operator who could stop paying.",
   },
   {
-    icon: Rebate,
+    icon: Check,
     tone: "text-ink",
     ring: "group-hover:border-edge",
-    name: "Trader rebate",
-    line: "Gives part of every fee straight back to the trader.",
-    body: "The person who just bought is credited on the same transaction. It makes your book cheaper to trade than it looks on paper.",
+    name: "None",
+    line: "Keeps your whole take with you.",
+    body: "Cashback is optional and zero is the default. Whatever you choose is disclosed on the token page before anyone trades, and can never be changed after.",
   },
 ];
 
@@ -122,8 +122,9 @@ export function Landing({
               <span className="text-pop [text-shadow:0_0_44px_rgb(20_216_44_/_0.5)]">liquidity</span>.
             </h1>
             <p className="mx-auto mt-5 max-w-[46ch] text-[14.5px] leading-relaxed text-dim md:mx-0">
-              Launch a token priced in a graduated Pons token rather than ETH, and let every trade burn
-              that token, rebate it, or pay it out to the people holding yours.
+              Launch a token on a plain ETH curve that is a real Uniswap pool from block one. When it
+              fills, the entire raise market-buys a graduated Pons token and becomes locked liquidity
+              paired with it.
             </p>
 
             <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center md:justify-start">
@@ -142,7 +143,7 @@ export function Landing({
         <div className="grid grid-cols-3 gap-4 py-7">
           <Stat value={quoteCount ?? "…"} label="Quote tokens" />
           <Stat value={launchCount ?? "…"} label="Launches" />
-          <Stat value={graduatedCount ?? "…"} label="Graduated" />
+          <Stat value={graduatedCount ?? "…"} label="Bonded" />
         </div>
       </section>
 
@@ -150,7 +151,7 @@ export function Landing({
       <section>
         <div className="eyebrow">How it works</div>
         <h2 className="mt-3 max-w-[20ch] font-display text-[26px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink sm:text-[32px]">
-          Three decisions, then it leaves your hands.
+          Three steps, then it leaves your hands.
         </h2>
 
         <div className="mt-8 divide-y divide-edge border-y border-edge">
@@ -168,12 +169,12 @@ export function Landing({
       <section>
         <div className="eyebrow">The difference</div>
         <h2 className="mt-3 max-w-[24ch] font-display text-[26px] font-semibold leading-[1.15] tracking-[-0.03em] text-ink sm:text-[32px]">
-          Your volume can be worth something to the community you launched on.
+          Your volume can be worth something to the community your token bonds into.
         </h2>
         <p className="mt-4 max-w-[62ch] text-[14px] leading-relaxed text-dim">
-          Every fee here is already denominated in the quote token, so routing part of it back costs
-          nothing to arrange: no swap, no oracle, no operator holding funds. Pick one at creation; it is
-          permanent.
+          Every bond is a large public market buy of the quote token, and cashback keeps it going after:
+          during the ETH phase the carve-out accrues in WETH and converts at the bond, and from then on
+          it is already the quote token. Pick a mode at creation; it is permanent.
         </p>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-3">

@@ -17,12 +17,17 @@ export interface Quote {
   totalVolume: string;
   totalCreatorFees: string;
   totalProtocolFees: string;
-  totalRebates: string;
 }
 
+/**
+ * One launch. Money fields follow the launch's phase: pre-bond the venue is
+ * the WETH curve pool (lastPriceQuoteWad is WETH per token; volumeEth and
+ * creatorFeesEth accrue), post-bond the venue is the bonded quote pool
+ * (lastPriceQuoteWad is quote per token; volumeQuote and the quote
+ * aggregates accrue). phase: 0 Trading, 1 Bonded, 2 Rescued.
+ */
 export interface Launch {
   token: `0x${string}`;
-  curve: `0x${string}`;
   deployer: `0x${string}`;
   creatorFeeRecipient: `0x${string}`;
   quoteToken: `0x${string}`;
@@ -36,37 +41,41 @@ export interface Launch {
   website: string;
   farcaster: string;
   supply: string;
-  graduationThreshold: string;
+  phantomEth: string;
+  bondThresholdEth: string;
   creatorFeeBps: number;
   cashbackMode: number;
   cashbackShareBps: number;
   phase: number;
   createdAt: string;
-  graduatedAt: string | null;
-  poolId: `0x${string}` | null;
+  bondedAt: string | null;
+  bondReady: boolean;
+  curvePoolId: `0x${string}`;
+  bondedPoolId: `0x${string}` | null;
   positionId: string | null;
   lockedSupplyExcess: string;
+  ethConverted: string | null;
+  quoteBought: string | null;
   lastPriceQuoteWad: string;
-  realQuoteReserve: string;
-  curveProgressBps: number;
+  volumeEth: string;
   volumeQuote: string;
   tradeCount: number;
-  holderCount: number;
   burnedQuote: string;
   holderRewardsQuote: string;
   creatorFeesQuote: string;
-  rebatesQuote: string;
+  creatorFeesEth: string;
 }
 
+/** denom: 0 = ETH/WETH, 1 = the launch's bond quote token. */
 export interface Trade {
   id: string;
   token: `0x${string}`;
   trader: `0x${string}`;
   isBuy: boolean;
   venue: "curve" | "pool";
+  denom: number;
   quoteAmount: string;
   tokenAmount: string;
-  rebate: string;
   priceQuoteWad: string;
   timestamp: string;
   txHash: `0x${string}`;
@@ -74,6 +83,7 @@ export interface Trade {
 
 export interface Candle {
   bucketStart: string;
+  denom: number;
   open: string;
   high: string;
   low: string;
@@ -81,9 +91,22 @@ export interface Candle {
   volumeQuote: string;
 }
 
-export interface Holder {
-  account: `0x${string}`;
-  balance: string;
+/**
+ * Curve progress toward the bond, derived from the last trade price against
+ * the launch's ETH terms. The curve is constant-product with a phantom
+ * reserve, so the ETH raised at price p is sqrt(p * phantom * supply) -
+ * phantom. Display-only; floating point is fine here.
+ */
+export function curveProgress(launch: Launch): { raisedEth: number; thresholdEth: number; bps: number } {
+  const thresholdEth = Number(launch.bondThresholdEth) / 1e18;
+  if (launch.phase !== 0) return { raisedEth: thresholdEth, thresholdEth, bps: 10_000 };
+  const p = Number(launch.lastPriceQuoteWad) / 1e18;
+  const phantom = Number(launch.phantomEth) / 1e18;
+  const supply = Number(launch.supply) / 1e18;
+  const raised = Math.max(0, Math.sqrt(Math.max(0, p * phantom * supply)) - phantom);
+  const clamped = Math.min(raised, thresholdEth);
+  const bps = thresholdEth > 0 ? Math.round((clamped / thresholdEth) * 10_000) : 0;
+  return { raisedEth: clamped, thresholdEth, bps: launch.bondReady ? 10_000 : Math.min(bps, 9_999) };
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -104,17 +127,18 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
   return body.data;
 }
 
-const LAUNCH_FIELDS = `token curve deployer creatorFeeRecipient quoteToken name symbol logo description
-twitter telegram discord website farcaster supply graduationThreshold creatorFeeBps cashbackMode
-cashbackShareBps phase createdAt graduatedAt poolId positionId lockedSupplyExcess lastPriceQuoteWad
-realQuoteReserve curveProgressBps volumeQuote tradeCount holderCount burnedQuote holderRewardsQuote creatorFeesQuote rebatesQuote`;
+const LAUNCH_FIELDS = `token deployer creatorFeeRecipient quoteToken name symbol logo description
+twitter telegram discord website farcaster supply phantomEth bondThresholdEth creatorFeeBps cashbackMode
+cashbackShareBps phase createdAt bondedAt bondReady curvePoolId bondedPoolId positionId lockedSupplyExcess
+ethConverted quoteBought lastPriceQuoteWad volumeEth volumeQuote tradeCount burnedQuote holderRewardsQuote
+creatorFeesQuote creatorFeesEth`;
 
 export const indexer = {
   quotes: () => get<Quote[]>("/quotes"),
 
   quote: async (address: string) => {
     const data = await gql<{ quote: Quote | null }>(
-      `query($a: String!){ quote(address:$a){ address symbol name decimals paused phantomQuote graduationThreshold launchCount graduatedCount totalBurned totalHolderRewards totalVolume totalCreatorFees totalProtocolFees totalRebates } }`,
+      `query($a: String!){ quote(address:$a){ address symbol name decimals paused phantomQuote graduationThreshold launchCount graduatedCount totalBurned totalHolderRewards totalVolume totalCreatorFees totalProtocolFees } }`,
       { a: address.toLowerCase() },
     );
     return data.quote;
@@ -143,14 +167,14 @@ export const indexer = {
 
   trending: async (limit = 12) => {
     const data = await gql<{ launchs: { items: Launch[] } }>(
-      `query{ launchs(orderBy:"volumeQuote", orderDirection:"desc", limit:${limit}, where:{phase: 0}){ items{ ${LAUNCH_FIELDS} } } }`,
+      `query{ launchs(orderBy:"volumeEth", orderDirection:"desc", limit:${limit}, where:{phase: 0}){ items{ ${LAUNCH_FIELDS} } } }`,
     );
     return data.launchs.items;
   },
 
-  recentlyGraduated: async (limit = 8) => {
+  recentlyBonded: async (limit = 8) => {
     const data = await gql<{ launchs: { items: Launch[] } }>(
-      `query{ launchs(orderBy:"graduatedAt", orderDirection:"desc", limit:${limit}, where:{phase: 2}){ items{ ${LAUNCH_FIELDS} } } }`,
+      `query{ launchs(orderBy:"bondedAt", orderDirection:"desc", limit:${limit}, where:{phase: 1}){ items{ ${LAUNCH_FIELDS} } } }`,
     );
     return data.launchs.items;
   },
@@ -158,11 +182,10 @@ export const indexer = {
   trades: (token: string) => get<Trade[]>(`/launches/${token.toLowerCase()}/trades`),
   candles: (token: string, interval: number) =>
     get<Candle[]>(`/launches/${token.toLowerCase()}/candles/${interval}`),
-  holders: (token: string) => get<Holder[]>(`/launches/${token.toLowerCase()}/holders`),
 
   creatorStats: async (creator: string) => {
-    const data = await gql<{ creatorStats: { items: Array<{ quoteToken: `0x${string}`; feesEarned: string; rebatesFunded: string; burnsFunded: string; launches: number }> } }>(
-      `query($c: String!){ creatorStats(where:{creator:$c}){ items{ quoteToken feesEarned rebatesFunded burnsFunded launches } } }`,
+    const data = await gql<{ creatorStats: { items: Array<{ quoteToken: `0x${string}`; feesEarned: string; burnsFunded: string; launches: number }> } }>(
+      `query($c: String!){ creatorStats(where:{creator:$c}){ items{ quoteToken feesEarned burnsFunded launches } } }`,
       { c: creator.toLowerCase() },
     );
     return data.creatorStats.items;

@@ -43,6 +43,11 @@ export const PopLaunchFactoryAbi = [
     "internalType": "contract IPopQuoteRegistry"
    },
    {
+    "name": "weth_",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
     "name": "initialLaunchFee",
     "type": "uint256",
     "internalType": "uint256"
@@ -52,7 +57,7 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "function",
-  "name": "GRADUATION_RESCUE_DELAY",
+  "name": "BOND_RESCUE_DELAY",
   "inputs": [],
   "outputs": [
    {
@@ -85,11 +90,6 @@ export const PopLaunchFactoryAbi = [
       "internalType": "uint256"
      },
      {
-      "name": "curveFeeBps",
-      "type": "uint256",
-      "internalType": "uint256"
-     },
-     {
       "name": "poolFee",
       "type": "uint24",
       "internalType": "uint24"
@@ -118,6 +118,76 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "function",
+  "name": "bond",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "minQuoteOut",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "positionId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "bondedPoolKey",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "key",
+    "type": "tuple",
+    "internalType": "struct PoolKey",
+    "components": [
+     {
+      "name": "currency0",
+      "type": "address",
+      "internalType": "Currency"
+     },
+     {
+      "name": "currency1",
+      "type": "address",
+      "internalType": "Currency"
+     },
+     {
+      "name": "fee",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "tickSpacing",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "hooks",
+      "type": "address",
+      "internalType": "contract IHooks"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "canLaunch",
   "inputs": [
    {
@@ -137,7 +207,7 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "function",
-  "name": "createGraduatedPool",
+  "name": "curvePoolKey",
   "inputs": [
    {
     "name": "token",
@@ -147,12 +217,39 @@ export const PopLaunchFactoryAbi = [
   ],
   "outputs": [
    {
-    "name": "positionId",
-    "type": "uint256",
-    "internalType": "uint256"
+    "name": "key",
+    "type": "tuple",
+    "internalType": "struct PoolKey",
+    "components": [
+     {
+      "name": "currency0",
+      "type": "address",
+      "internalType": "Currency"
+     },
+     {
+      "name": "currency1",
+      "type": "address",
+      "internalType": "Currency"
+     },
+     {
+      "name": "fee",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "tickSpacing",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "hooks",
+      "type": "address",
+      "internalType": "contract IHooks"
+     }
+    ]
    }
   ],
-  "stateMutability": "nonpayable"
+  "stateMutability": "view"
  },
  {
   "type": "function",
@@ -185,11 +282,6 @@ export const PopLaunchFactoryAbi = [
     "components": [
      {
       "name": "supply",
-      "type": "uint256",
-      "internalType": "uint256"
-     },
-     {
-      "name": "curveFeeBps",
       "type": "uint256",
       "internalType": "uint256"
      },
@@ -276,11 +368,6 @@ export const PopLaunchFactoryAbi = [
       "internalType": "address"
      },
      {
-      "name": "curve",
-      "type": "address",
-      "internalType": "address"
-     },
-     {
       "name": "deployer",
       "type": "address",
       "internalType": "address"
@@ -294,11 +381,6 @@ export const PopLaunchFactoryAbi = [
       "name": "quoteToken",
       "type": "address",
       "internalType": "address"
-     },
-     {
-      "name": "graduationThreshold",
-      "type": "uint256",
-      "internalType": "uint256"
      },
      {
       "name": "poolFee",
@@ -335,20 +417,40 @@ export const PopLaunchFactoryAbi = [
      {
       "name": "phase",
       "type": "uint8",
-      "internalType": "enum GraduationPhase"
+      "internalType": "enum LaunchPhase"
      },
      {
-      "name": "sweptQuote",
+      "name": "phantomEth",
       "type": "uint256",
       "internalType": "uint256"
      },
      {
-      "name": "sweptTokens",
+      "name": "bondThresholdEth",
       "type": "uint256",
       "internalType": "uint256"
      },
      {
-      "name": "sweptAt",
+      "name": "curveTickLower",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "curveTickUpper",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "curveLiquidity",
+      "type": "uint128",
+      "internalType": "uint128"
+     },
+     {
+      "name": "reservedTokens",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "bondedAt",
       "type": "uint256",
       "internalType": "uint256"
      },
@@ -361,19 +463,6 @@ export const PopLaunchFactoryAbi = [
    }
   ],
   "stateMutability": "view"
- },
- {
-  "type": "function",
-  "name": "graduate",
-  "inputs": [
-   {
-    "name": "token",
-    "type": "address",
-    "internalType": "address"
-   }
-  ],
-  "outputs": [],
-  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -410,6 +499,25 @@ export const PopLaunchFactoryAbi = [
     "name": "",
     "type": "address",
     "internalType": "contract PopHook"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "isBondReady",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
    }
   ],
   "stateMutability": "view"
@@ -577,29 +685,14 @@ export const PopLaunchFactoryAbi = [
     "internalType": "address"
    },
    {
-    "name": "devBuyQuote",
-    "type": "uint256",
-    "internalType": "uint256"
-   },
-   {
     "name": "devBuyMinTokens",
     "type": "uint256",
     "internalType": "uint256"
-   },
-   {
-    "name": "snipeTaxExemptions",
-    "type": "address[]",
-    "internalType": "address[]"
    }
   ],
   "outputs": [
    {
     "name": "token",
-    "type": "address",
-    "internalType": "address"
-   },
-   {
-    "name": "curve",
     "type": "address",
     "internalType": "address"
    }
@@ -730,20 +823,7 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "function",
-  "name": "rescueCurveFees",
-  "inputs": [
-   {
-    "name": "token",
-    "type": "address",
-    "internalType": "address"
-   }
-  ],
-  "outputs": [],
-  "stateMutability": "nonpayable"
- },
- {
-  "type": "function",
-  "name": "rescueSweptGraduation",
+  "name": "rescueBond",
   "inputs": [
    {
     "name": "token",
@@ -909,6 +989,48 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "function",
+  "name": "uniswapV3SwapCallback",
+  "inputs": [
+   {
+    "name": "amount0Delta",
+    "type": "int256",
+    "internalType": "int256"
+   },
+   {
+    "name": "amount1Delta",
+    "type": "int256",
+    "internalType": "int256"
+   },
+   {
+    "name": "",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "unlockCallback",
+  "inputs": [
+   {
+    "name": "data",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "updateLaunchConfig",
   "inputs": [
    {
@@ -923,11 +1045,6 @@ export const PopLaunchFactoryAbi = [
     "components": [
      {
       "name": "supply",
-      "type": "uint256",
-      "internalType": "uint256"
-     },
-     {
-      "name": "curveFeeBps",
       "type": "uint256",
       "internalType": "uint256"
      },
@@ -954,6 +1071,19 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "function",
+  "name": "weth",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "whitelistedLaunchers",
   "inputs": [
    {
@@ -970,6 +1100,50 @@ export const PopLaunchFactoryAbi = [
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "event",
+  "name": "BondCashbackSettled",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "mode",
+    "type": "uint8",
+    "indexed": false,
+    "internalType": "uint8"
+   },
+   {
+    "name": "quoteAmount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "BondTokensPermanentlyLocked",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
  },
  {
   "type": "event",
@@ -1013,7 +1187,7 @@ export const PopLaunchFactoryAbi = [
     "internalType": "address"
    },
    {
-    "name": "quoteIn",
+    "name": "ethIn",
     "type": "uint256",
     "indexed": false,
     "internalType": "uint256"
@@ -1042,7 +1216,7 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "event",
-  "name": "GraduationTokensPermanentlyLocked",
+  "name": "LaunchBondRescued",
   "inputs": [
    {
     "name": "token",
@@ -1051,7 +1225,56 @@ export const PopLaunchFactoryAbi = [
     "internalType": "address"
    },
    {
-    "name": "amount",
+    "name": "recipient",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "wethAmount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "tokenAmount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "LaunchBonded",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "positionId",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "ethConverted",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "quoteBought",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "tokenAmount",
     "type": "uint256",
     "indexed": false,
     "internalType": "uint256"
@@ -1126,62 +1349,6 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "event",
-  "name": "LaunchGraduationRescued",
-  "inputs": [
-   {
-    "name": "token",
-    "type": "address",
-    "indexed": true,
-    "internalType": "address"
-   },
-   {
-    "name": "recipient",
-    "type": "address",
-    "indexed": true,
-    "internalType": "address"
-   },
-   {
-    "name": "quoteAmount",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   },
-   {
-    "name": "tokenAmount",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   }
-  ],
-  "anonymous": false
- },
- {
-  "type": "event",
-  "name": "LaunchSwept",
-  "inputs": [
-   {
-    "name": "token",
-    "type": "address",
-    "indexed": true,
-    "internalType": "address"
-   },
-   {
-    "name": "quoteOut",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   },
-   {
-    "name": "tokenOut",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   }
-  ],
-  "anonymous": false
- },
- {
-  "type": "event",
   "name": "OwnershipTransferStarted",
   "inputs": [
    {
@@ -1214,37 +1381,6 @@ export const PopLaunchFactoryAbi = [
     "type": "address",
     "indexed": true,
     "internalType": "address"
-   }
-  ],
-  "anonymous": false
- },
- {
-  "type": "event",
-  "name": "PoolGraduated",
-  "inputs": [
-   {
-    "name": "token",
-    "type": "address",
-    "indexed": true,
-    "internalType": "address"
-   },
-   {
-    "name": "positionId",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   },
-   {
-    "name": "tokenAmount",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
-   },
-   {
-    "name": "quoteAmount",
-    "type": "uint256",
-    "indexed": false,
-    "internalType": "uint256"
    }
   ],
   "anonymous": false
@@ -1286,12 +1422,6 @@ export const PopLaunchFactoryAbi = [
     "internalType": "address"
    },
    {
-    "name": "curve",
-    "type": "address",
-    "indexed": true,
-    "internalType": "address"
-   },
-   {
     "name": "deployer",
     "type": "address",
     "indexed": true,
@@ -1310,7 +1440,7 @@ export const PopLaunchFactoryAbi = [
     "internalType": "uint256"
    },
    {
-    "name": "graduationThreshold",
+    "name": "bondThresholdEth",
     "type": "uint256",
     "indexed": false,
     "internalType": "uint256"
@@ -1339,7 +1469,39 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "error",
-  "name": "AlreadySet",
+  "name": "AlreadySetError",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BondConversionSlippage",
+  "inputs": [
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "minimum",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "BondRescueTooEarly",
+  "inputs": [
+   {
+    "name": "availableAt",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "BondSeedNotViable",
   "inputs": []
  },
  {
@@ -1359,13 +1521,24 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "error",
-  "name": "CurveFeeTooHigh",
+  "name": "CurveGeometryNotViable",
   "inputs": []
  },
  {
   "type": "error",
-  "name": "CurveNotQuotable",
-  "inputs": []
+  "name": "DevBuySlippage",
+  "inputs": [
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "minimum",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
  },
  {
   "type": "error",
@@ -1375,22 +1548,6 @@ export const PopLaunchFactoryAbi = [
  {
   "type": "error",
   "name": "FeeTransferFailed",
-  "inputs": []
- },
- {
-  "type": "error",
-  "name": "GraduationRescueTooEarly",
-  "inputs": [
-   {
-    "name": "availableAt",
-    "type": "uint256",
-    "internalType": "uint256"
-   }
-  ]
- },
- {
-  "type": "error",
-  "name": "GraduationSeedNotViable",
   "inputs": []
  },
  {
@@ -1413,11 +1570,6 @@ export const PopLaunchFactoryAbi = [
     "internalType": "uint256"
    }
   ]
- },
- {
-  "type": "error",
-  "name": "InvalidBasisPoints",
-  "inputs": []
  },
  {
   "type": "error",
@@ -1477,22 +1629,27 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "error",
+  "name": "NotBondReady",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotConversionPool",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "NotCreatorFeeRecipient",
   "inputs": []
  },
  {
   "type": "error",
-  "name": "NotReadyToGraduate",
+  "name": "NotPoolManager",
   "inputs": []
  },
  {
   "type": "error",
   "name": "NotWhitelisted",
-  "inputs": []
- },
- {
-  "type": "error",
-  "name": "NothingToGraduate",
   "inputs": []
  },
  {
@@ -1526,6 +1683,17 @@ export const PopLaunchFactoryAbi = [
   "type": "error",
   "name": "ReentrancyGuardReentrantCall",
   "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "SafeCastOverflowedUintToInt",
+  "inputs": [
+   {
+    "name": "value",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
  },
  {
   "type": "error",
@@ -1565,7 +1733,7 @@ export const PopLaunchFactoryAbi = [
  },
  {
   "type": "error",
-  "name": "WrongGraduationPhase",
+  "name": "WrongLaunchPhase",
   "inputs": []
  },
  {

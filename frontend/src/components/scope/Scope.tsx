@@ -9,7 +9,7 @@ import { CASHBACK_ICON, CASHBACK_TONE } from "@/components/icons";
 import { ProgressBar, TokenTile } from "@/components/ui";
 import { CASHBACK_LABEL, fmtAmount, fmtPrice, timeAgo } from "@/lib/format";
 import type { Launch, Quote } from "@/lib/indexer";
-import { indexer } from "@/lib/indexer";
+import { curveProgress, indexer } from "@/lib/indexer";
 import type { ColumnKey, Filters } from "@/lib/scope";
 import {
   COLUMNS,
@@ -61,7 +61,7 @@ function Row({ launch, quote }: { launch: Launch; quote?: Quote }) {
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] tabular-nums">
             {quote?.symbol && <span className="text-dim/70">${quote.symbol}</span>}
             <span className="text-pop">{fmtPrice(launch.lastPriceQuoteWad, decimals)}</span>
-            <span className="text-dim">{launch.holderCount} hld</span>
+            <span className="text-dim">{launch.tradeCount} trades</span>
             <span className="text-dim">{fmtAmount(launch.volumeQuote, decimals)} vol</span>
             {Icon && (
               <span className={`flex items-center gap-1 ${tone}`} title={CASHBACK_LABEL[launch.cashbackMode]}>
@@ -72,9 +72,9 @@ function Row({ launch, quote }: { launch: Launch; quote?: Quote }) {
 
           {live && (
             <div className="mt-1.5 flex items-center gap-2">
-              <ProgressBar bps={launch.curveProgressBps} />
+              <ProgressBar bps={curveProgress(launch).bps} />
               <span className="w-8 shrink-0 text-right text-[10.5px] tabular-nums text-dim">
-                {(launch.curveProgressBps / 100).toFixed(0)}%
+                {(curveProgress(launch).bps / 100).toFixed(0)}%
               </span>
             </div>
           )}
@@ -177,7 +177,7 @@ export function Scope() {
   });
   const graduatedQ = useQuery({
     queryKey: ["scope-graduated"],
-    queryFn: () => indexer.recentlyGraduated(SCOPE_GRADUATED_LIMIT),
+    queryFn: () => indexer.recentlyBonded(SCOPE_GRADUATED_LIMIT),
     refetchInterval: 5_000,
   });
 
