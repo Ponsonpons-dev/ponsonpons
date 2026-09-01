@@ -20,10 +20,13 @@
  * The revenue splitter's and burner's `distribute`/`convertAndDistribute`
  * cranks are permissionless and can be added here later.
  *
- * Finally it cranks revenue on the same cadence: the splitter's and burner's
- * `distribute` (permissionless, fixed recipients) and, once the buyback
- * budget is worth the gas, the burner's `buyAndBurn`, which can only send
- * what it buys to the dead address.
+ * Finally it cranks revenue on the same cadence, across every denomination
+ * it can arrive in: the splitter's and burner's `distribute` for quote-token
+ * revenue, `convertAndDistribute` for the WETH that curve-phase trading
+ * produces, `distributeEth` for launch fees, and, once the buyback budget is
+ * worth the gas, the burner's `buyAndBurn`, which can only send what it buys
+ * to the dead address. All are permissionless or keeper-gated with fixed
+ * recipients, so the keeper chooses timing and never destination.
  *
  * Env: KEEPER_PRIVATE_KEY (required), RPC_URL, FACTORY, HOOK, SPLITTER,
  *      BURNER, QUOTE, INDEXER_URL, CHECK_MS (2000), LIST_MS (30000),
@@ -53,12 +56,20 @@ const hookAbi = parseAbi([
   "error SlippageExceeded(uint256 actual, uint256 minimum)",
 ]);
 
-const splitterAbi = parseAbi(["function distribute(address asset)"]);
+const splitterAbi = parseAbi([
+  "function distribute(address asset)",
+  "function convertAndDistribute(uint256 minRewardOut)",
+  "function distributeEth()",
+  "error ConversionSlippage(uint256 actual, uint256 minimum)",
+]);
 
 const burnerAbi = parseAbi([
   "function distribute()",
+  "function convertAndDistribute(uint256 minQuoteOut)",
   "function buybackBudget() view returns (uint256)",
   "function buyAndBurn(uint256 quoteIn, uint256 minOut, uint256 deadline) returns (uint256)",
+  "error SlippageExceeded(uint256 actual, uint256 minimum)",
+  "error ConversionSlippage(uint256 actual, uint256 minimum)",
 ]);
 
 const RPC_URL = process.env.RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
@@ -261,6 +272,49 @@ function poolIdOf(key) {
 }
 
 /**
+ * Prices a WETH-to-quote conversion the way the sweeps do: simulate with an
+ * unreachable floor, read the real output out of the revert, then send with a
+ * slippage allowance under it. Contracts differ in which error they raise, so
+ * both names are matched.
+ */
+async function convertCrank(label, address, abi) {
+  let quoted = 0n;
+  try {
+    await publicClient.simulateContract({
+      account,
+      address,
+      abi,
+      functionName: "convertAndDistribute",
+      args: [2n ** 255n],
+    });
+    return; // nothing to convert
+  } catch (err) {
+    const hit = [err, err?.cause, err?.cause?.cause].find((e) =>
+      ["ConversionSlippage", "SlippageExceeded"].includes(e?.data?.errorName),
+    );
+    if (!hit) return; // nothing pending, or the conversion cannot run yet
+    quoted = hit.data.args[0];
+  }
+  if (quoted === 0n) return;
+  const minOut = (quoted * (10_000n - SWEEP_SLIPPAGE_BPS)) / 10_000n;
+  try {
+    const { request } = await publicClient.simulateContract({
+      account,
+      address,
+      abi,
+      functionName: "convertAndDistribute",
+      args: [minOut],
+      ...(await fees()),
+    });
+    const hash = await wallet.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash, timeout: 60_000 });
+    log(`${label} (min ${minOut}): ${hash}`);
+  } catch (err) {
+    console.error(`${label} failed: ${err.shortMessage ?? err.message}`);
+  }
+}
+
+/**
  * Revenue cranks. Both `distribute` calls are permissionless and pay only
  * fixed recipients, so the keeper is choosing timing, never destination.
  * `buyAndBurn` is keeper-gated and spends the accrued budget on $POP that
@@ -289,6 +343,12 @@ async function crankRevenue() {
 
   await call("splitter.distribute", SPLITTER, splitterAbi, "distribute", [QUOTE]);
   await call("burner.distribute", BURNER, burnerAbi, "distribute", []);
+  // Curve-phase revenue arrives in WETH and has to be bought into the quote
+  // before it can be split, and launch fees arrive as plain ETH. Without
+  // these two the PONS path alone leaves both quietly accumulating.
+  await convertCrank("splitter.convertAndDistribute", SPLITTER, splitterAbi);
+  await convertCrank("burner.convertAndDistribute", BURNER, burnerAbi);
+  await call("splitter.distributeEth", SPLITTER, splitterAbi, "distributeEth", []);
 
   try {
     const budget = await publicClient.readContract({
