@@ -14,8 +14,10 @@ import { shortAddr } from "@/lib/format";
  * its own fallback.
  */
 const IPFS_GATEWAYS = [
-  "https://gateway.pinata.cloud/ipfs/",
+  // Ordered by measured latency on this content: ipfs.io answers in a
+  // fraction of a second, Pinata takes seconds but rarely refuses.
   "https://ipfs.io/ipfs/",
+  "https://gateway.pinata.cloud/ipfs/",
   "https://dweb.link/ipfs/",
 ];
 
