@@ -27,7 +27,8 @@ import {
     FeePolicySnapshot,
     IPopFeeEscrow,
     IPopFeePolicy,
-    IPopRewardSink
+    IPopRewardSink,
+    SnipeTaxTerms
 } from "./interfaces/IPop.sol";
 import {BaseHook} from "./vendor/BaseHook.sol";
 
@@ -37,9 +38,9 @@ import {BaseHook} from "./vendor/BaseHook.sol";
  * Takes a fee cut on every swap via `afterSwap` (Flaunch-style Internal Swap
  * Pool), and whenever that cut lands in the launch token, converts it back
  * to the pool's quote token against the pool's own liquidity before it is
- * ever distributed. The same protocol / creator / quote-burn split that
- * governs PopBondingCurve's pre-graduation fee sweep lives here, so both
- * phases behave identically. Adapted from the verified PonsV2MemeHook.
+ * ever distributed. The same protocol / creator / quote-burn split
+ * governs the WETH curve pool and the bonded quote pool, so both phases
+ * behave identically. Adapted from the verified PonsV2MemeHook.
  *
  * Differences from the Pons reference, by design:
  * - The fee policy terms (protocol share, hook fee, price-impact bound) are
@@ -49,9 +50,9 @@ import {BaseHook} from "./vendor/BaseHook.sol";
  *   recipient is still snapshotted per launch.
  * - No buyback-into-vest: the QuoteBurn cashback mode sends the quote token
  *   to the dead address after the protocol split, needing no extra swap.
- * - The TraderRebate mode is curve-only: after graduation the swap router
- *   obscures the human trader, so that share reverts to the creator
- *   (disclosed at launch creation).
+ * - The TraderRebate mode is retired: a swap router always stands between
+ *   this hook and the human trader now, so the share stays with the creator
+ *   (disclosed at launch creation) and new launches cannot select the mode.
  * - Both pool currencies are always ERC-20s; there is no native branch.
  */
 contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, ReentrancyGuard {
@@ -78,8 +79,8 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
     uint256 private constant BASIS_POINTS = 10_000;
     uint256 private constant MAX_PROTOCOL_FEE_SHARE_BPS = 5_000;
     uint256 private constant MAX_HOOK_FEE_BPS = 1_000;
-    // Mirrors PopBondingCurve's own ceiling, so a graduated pool can never
-    // charge more per trade than the curve it graduated from.
+    // Ceiling on the combined per-trade take across every pool this hook
+    // governs, curve phase and bonded phase alike.
     uint256 private constant MAX_TOTAL_TRADE_FEE_BPS = 2_000;
     address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
@@ -116,6 +117,10 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
     event PoolHolderRewardsPushed(PoolId indexed poolId, uint256 amount);
     event ProtocolFeeRecipientUpdated(address recipient);
     event FeeSweepOperatorUpdated(address operator);
+    event SnipeTaxCharged(PoolId indexed poolId, address currency, uint256 amount);
+    event BondReady(PoolId indexed poolId);
+    event BondCashbackAccrued(PoolId indexed poolId, uint256 amount);
+    event CurvePoolRetired(PoolId indexed poolId);
 
     IPopFeeEscrow public immutable feeEscrow;
     // Policy terms are immutable: what the protocol charges and how far an
@@ -130,7 +135,31 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
     address public protocolFeeRecipient;
     address public feeSweepOperator;
 
+    /**
+     * @notice Extra terms carried only by a launch's ETH curve pool: the
+     * decaying snipe tax window and the tick whose crossing marks the curve
+     * as fully bought and therefore bond-ready.
+     */
+    struct CurveTerms {
+        bool isCurve;
+        bool retired;
+        // Buys push the price toward the bond tick from below when the
+        // launch token is currency0 (tick rises), from above when it is
+        // currency1 (tick falls). `bondAbove` records which comparison marks
+        // the curve as fully bought.
+        bool bondAbove;
+        uint16 snipeStartBps;
+        uint32 snipeWindowSeconds;
+        uint64 launchedAt;
+        uint64 bondReadyAt;
+        int24 bondTick;
+    }
+
     mapping(PoolId => LaunchInfo) public launches;
+    mapping(PoolId => CurveTerms) public curveTerms;
+    // The cashback carve-out of curve-phase fees, held in WETH until the
+    // bond converts it to the launch's quote alongside the raise itself.
+    mapping(PoolId => uint256) public pendingBondCashback;
     mapping(PoolId => PoolKey) private _poolKeys;
     // Pending fee buckets per currency (the launch token or the quote
     // token). The creator fee is tracked separately from the base fee so it
@@ -319,6 +348,50 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
     }
 
     /**
+     * @notice Marks an already-registered pool as a launch's ETH curve
+     * phase: the snipe tax window applies, price crossings of the curve's
+     * top tick record bond-readiness, and the cashback carve-out of swept
+     * fees is held for the bond's conversion instead of being settled in
+     * WETH. Called by the factory in the same transaction as `registerPool`.
+     */
+    function registerCurveTerms(PoolId poolId, SnipeTaxTerms calldata snipe, int24 bondTick, bool bondAbove)
+        external
+        onlyFactory
+    {
+        if (!launches[poolId].registered) revert UnknownPool();
+        if (curveTerms[poolId].isCurve) revert AlreadyRegistered();
+        curveTerms[poolId] = CurveTerms({
+            isCurve: true,
+            retired: false,
+            bondAbove: bondAbove,
+            snipeStartBps: snipe.startBps,
+            snipeWindowSeconds: snipe.windowSeconds,
+            launchedAt: snipe.launchedAt,
+            bondReadyAt: 0,
+            bondTick: bondTick
+        });
+    }
+
+    /**
+     * @notice Hands the curve pool's accumulated WETH cashback carve-out to
+     * the factory for the bond's conversion, and retires the curve terms so
+     * the snipe tax and bond checks stop running. Any fee dust swept after
+     * retirement settles to the creator rather than being burned as WETH.
+     */
+    function collectBondCashback(PoolId poolId) external onlyFactory returns (uint256 amount) {
+        CurveTerms storage terms = curveTerms[poolId];
+        if (!terms.isCurve) revert UnknownPool();
+        terms.isCurve = false;
+        terms.retired = true;
+        amount = pendingBondCashback[poolId];
+        if (amount != 0) {
+            pendingBondCashback[poolId] = 0;
+            IERC20(launches[poolId].quoteToken).safeTransfer(factory, amount);
+        }
+        emit CurvePoolRetired(poolId);
+    }
+
+    /**
      * @notice Updates who receives this pool's creator fee share. Restricted
      * to the factory, which authenticates the current creator recipient
      * before forwarding here; there is no protocol-side override.
@@ -358,18 +431,19 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
      * is left untouched here and only converted to the quote token later, in
      * a batched `sweepPoolFees` call, rather than on every single swap.
      */
-    function _afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata)
-        internal
-        override
-        returns (bytes4, int128)
-    {
+    function _afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata hookData
+    ) internal override returns (bytes4, int128) {
         // The conversion leg swaps against this same pool, but it is never
         // taxed here: v4-core skips a pool's hooks when the hook itself is
         // the caller.
         PoolId poolId = key.toId();
         LaunchInfo memory info = launches[poolId];
         if (!info.registered) return (IHooks.afterSwap.selector, 0);
-        if (info.hookFeeBps == 0 && info.creatorFeeBps == 0) return (IHooks.afterSwap.selector, 0);
 
         bool specifiedIsCurrency0 = (params.amountSpecified < 0) == params.zeroForOne;
         (Currency feeCurrency, int128 unspecifiedAmount) =
@@ -380,16 +454,75 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
         uint256 unspecified = uint256(uint128(unspecifiedAmount));
         uint256 feeAmount = (unspecified * info.hookFeeBps) / BASIS_POINTS;
         uint256 creatorFeeAmount = (unspecified * info.creatorFeeBps) / BASIS_POINTS;
-        uint256 totalAmount = feeAmount + creatorFeeAmount;
+        uint256 snipeTaxAmount =
+            _curveSwapExtras(poolId, params, info.memecoinIsCurrency0, unspecified, sender, hookData);
+
+        uint256 totalAmount = feeAmount + creatorFeeAmount + snipeTaxAmount;
         if (totalAmount == 0) return (IHooks.afterSwap.selector, 0);
 
         address feeCurrencyAddr = Currency.unwrap(feeCurrency);
         _takeExact(feeCurrency, feeCurrencyAddr, totalAmount);
-        if (feeAmount != 0) pendingFees[poolId][feeCurrencyAddr] += feeAmount;
+        // The snipe tax rides the base-fee bucket: it splits between the
+        // protocol and the creator at sweep time, mirroring how the old
+        // curve folded it into fees.
+        uint256 baseBucket = feeAmount + snipeTaxAmount;
+        if (baseBucket != 0) pendingFees[poolId][feeCurrencyAddr] += baseBucket;
         if (creatorFeeAmount != 0) pendingCreatorFees[poolId][feeCurrencyAddr] += creatorFeeAmount;
 
+        if (snipeTaxAmount != 0) emit SnipeTaxCharged(poolId, feeCurrencyAddr, snipeTaxAmount);
         emit HookFeeCollected(poolId, feeCurrencyAddr, feeAmount, creatorFeeAmount);
         return (IHooks.afterSwap.selector, int128(uint128(totalAmount)));
+    }
+
+    /**
+     * @dev Curve-pool-only per-swap work: the decaying snipe tax on buys and
+     * the bond-readiness check. Returns the snipe tax to add to this swap's
+     * take, in the unspecified currency.
+     *
+     * The tax exemption is trusted only when the swap was routed by the
+     * factory itself (the launch transaction's dev buy), which authenticates
+     * the exempt address before passing it in `hookData`. Any other router's
+     * hookData is ignored: a sniper cannot self-exempt by crafting calldata.
+     */
+    function _curveSwapExtras(
+        PoolId poolId,
+        SwapParams calldata params,
+        bool memecoinIsCurrency0,
+        uint256 unspecified,
+        address sender,
+        bytes calldata hookData
+    ) private returns (uint256 snipeTaxAmount) {
+        CurveTerms storage terms = curveTerms[poolId];
+        if (!terms.isCurve) return 0;
+
+        // Bond-readiness: the first time the price closes at or past the
+        // curve range's far edge, the curve is fully bought and anyone may
+        // bond.
+        if (terms.bondReadyAt == 0) {
+            (, int24 tick,,) = StateLibrary.getSlot0(poolManager, poolId);
+            if (terms.bondAbove ? tick >= terms.bondTick : tick <= terms.bondTick) {
+                terms.bondReadyAt = uint64(block.timestamp);
+                emit BondReady(poolId);
+            }
+        }
+
+        uint256 elapsed = block.timestamp - terms.launchedAt;
+        if (terms.snipeStartBps == 0 || elapsed >= terms.snipeWindowSeconds) return 0;
+        // Only buys are taxed: a buy is any swap whose output is the launch
+        // token.
+        bool isBuy = memecoinIsCurrency0 ? !params.zeroForOne : params.zeroForOne;
+        if (!isBuy) return 0;
+        if (sender == factory && hookData.length != 0) return 0;
+
+        uint256 taxBps =
+            (uint256(terms.snipeStartBps) * (terms.snipeWindowSeconds - elapsed)) / terms.snipeWindowSeconds;
+        // Bounded so the combined take always leaves the buyer at least 1%
+        // of the leg, and the returned delta stays within the unspecified
+        // amount.
+        LaunchInfo storage info = launches[poolId];
+        uint256 maxTaxBps = BASIS_POINTS - 100 - info.hookFeeBps - info.creatorFeeBps;
+        if (taxBps > maxTaxBps) taxBps = maxTaxBps;
+        snipeTaxAmount = (unspecified * taxBps) / BASIS_POINTS;
     }
 
     // ---------------------------------------------------------------------
@@ -555,9 +688,9 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
         uint256 protocolAmount = (totalQuote * info.protocolFeeShareBps) / BASIS_POINTS;
         uint256 creatorTake = totalQuote - protocolAmount + creatorFeeQuote;
 
-        // TraderRebate is curve-only, after graduation the router stands
-        // between the hook and the human, so that share reverts to the
-        // creator, as disclosed at launch creation.
+        // TraderRebate was retired with the standalone curve, the router
+        // always stands between the hook and the human, so that share stays
+        // with the creator, as disclosed at launch creation.
         bool settlesCashback =
             info.cashbackMode == CashbackMode.QuoteBurn || info.cashbackMode == CashbackMode.HolderRewards;
         uint256 cashbackAmount;
@@ -567,7 +700,20 @@ contract PopHook is BaseHook, IUnlockCallback, IPopFeePolicy, Ownable2Step, Reen
         uint256 creatorAmount = creatorTake - cashbackAmount;
 
         if (cashbackAmount != 0) {
-            if (info.cashbackMode == CashbackMode.QuoteBurn) {
+            CurveTerms storage terms = curveTerms[poolId];
+            if (terms.isCurve) {
+                // Curve phase: this pool's quote is WETH, and the carve-out
+                // is promised in the launch's bond quote. Hold it here for
+                // the bond's conversion instead of burning or pushing WETH.
+                pendingBondCashback[poolId] += cashbackAmount;
+                emit BondCashbackAccrued(poolId, cashbackAmount);
+            } else if (terms.retired) {
+                // Fee dust swept off a spent curve pool after its bond: the
+                // conversion has already run, so route the carve-out to the
+                // creator rather than burn WETH.
+                creatorAmount += cashbackAmount;
+                cashbackAmount = 0;
+            } else if (info.cashbackMode == CashbackMode.QuoteBurn) {
                 IERC20(info.quoteToken).safeTransfer(DEAD, cashbackAmount);
                 emit PoolQuoteBurned(poolId, cashbackAmount);
             } else {

@@ -23,6 +23,7 @@ import {PopQuoteRegistry} from "../src/PopQuoteRegistry.sol";
 import {PopRevenueSplitter} from "../src/PopRevenueSplitter.sol";
 import {PopRewardTokenDeployer} from "../src/PopRewardTokenDeployer.sol";
 import {IPonsV1LaunchFactory, IUniswapV3FactoryLike, PonsV1QuoteAdapter} from "../src/adapters/PonsV1QuoteAdapter.sol";
+import {PopSwapRouter} from "../src/PopSwapRouter.sol";
 import {IPopFeeEscrow, IPopQuoteRegistry} from "../src/interfaces/IPop.sol";
 
 /**
@@ -65,7 +66,6 @@ contract Deploy is Script {
     uint16 internal constant PROTOCOL_FEE_SHARE_BPS = 5_000; // 50% of the 1% base fee, the hook's hard cap
     uint256 internal constant HOOK_FEE_BPS = 100; // 1%
     uint256 internal constant MAX_INTERNAL_PRICE_IMPACT_BPS = 300; // 3%
-    uint256 internal constant CURVE_FEE_BPS = 100; // 1%
     uint256 internal constant LAUNCH_SUPPLY = 1_000_000_000 ether;
     int24 internal constant TICK_SPACING = 200;
     // 15% of protocol revenue to $POP holders; owner-adjustable afterwards.
@@ -95,12 +95,22 @@ contract Deploy is Script {
         //    limit even with via_ir.
         address governor = _governance(protocolOwner, useTimelock);
 
-        // 2. Ownerless plumbing, then the revenue periphery. The splitter must
-        //    exist before the hook is mined: it is the protocol fee recipient
-        //    every launch snapshots, so wiring it from genesis means no launch
-        //    can ever predate the holder revenue share.
+        // 2. Ownerless plumbing and the registry, then the revenue
+        //    periphery. The splitter must exist before the hook is mined: it
+        //    is the protocol fee recipient every launch snapshots, so wiring
+        //    it from genesis means no launch can ever predate the holder
+        //    revenue share. The registry must exist before the splitter,
+        //    which uses it to convert curve-phase WETH revenue.
         PopFeeEscrow escrow = new PopFeeEscrow();
-        _revenue(protocolOwner, escrow);
+        PonsV1QuoteAdapter adapter = new PonsV1QuoteAdapter(
+            IPonsV1LaunchFactory(A.PONS_V1_FACTORY),
+            IPonsV1LaunchFactory(A.PONS_V1_LEGACY_FACTORY),
+            IUniswapV3FactoryLike(A.UNISWAP_V3_FACTORY),
+            A.WETH
+        );
+        PopQuoteRegistry registry = new PopQuoteRegistry(deployer, minEthTvl, targetEth);
+        registry.addAdapter(adapter);
+        _revenue(protocolOwner, escrow, registry);
 
         // 3. Locker (owner = deployer for wiring, then timelock).
         PopLocker locker = new PopLocker(deployer, A.UNISWAP_V4_POSITION_MANAGER);
@@ -130,16 +140,6 @@ contract Deploy is Script {
         );
         require(address(hook) == hookAddress, "hook address mismatch");
 
-        // 5. Quote registry + the Pons v1 origin adapter.
-        PonsV1QuoteAdapter adapter = new PonsV1QuoteAdapter(
-            IPonsV1LaunchFactory(A.PONS_V1_FACTORY),
-            IPonsV1LaunchFactory(A.PONS_V1_LEGACY_FACTORY),
-            IUniswapV3FactoryLike(A.UNISWAP_V3_FACTORY),
-            A.WETH
-        );
-        PopQuoteRegistry registry = new PopQuoteRegistry(deployer, minEthTvl, targetEth);
-        registry.addAdapter(adapter);
-
         // 6. Factory + helpers.
         PopLaunchFactory factory = new PopLaunchFactory(
             deployer,
@@ -150,6 +150,7 @@ contract Deploy is Script {
             hook,
             IPopFeeEscrow(address(escrow)),
             IPopQuoteRegistry(address(registry)),
+            A.WETH,
             launchFee
         );
         PopGraduationExecutor executor = new PopGraduationExecutor(
@@ -164,12 +165,11 @@ contract Deploy is Script {
         factory.setGraduationExecutor(executor);
         factory.setLaunchDeployer(launchDeployer);
         factory.addLaunchConfig(
-            PopLaunchFactory.LaunchConfig({
-                supply: LAUNCH_SUPPLY, curveFeeBps: CURVE_FEE_BPS, poolFee: 0, tickSpacing: TICK_SPACING, enabled: true
-            })
+            PopLaunchFactory.LaunchConfig({supply: LAUNCH_SUPPLY, poolFee: 0, tickSpacing: TICK_SPACING, enabled: true})
         );
         hook.setFactory(address(factory));
         locker.setFactory(address(factory));
+        PopSwapRouter swapRouter = new PopSwapRouter(factory);
 
         // 8. List the flagship quote. Permissionless, done here only for
         //    convenience; anyone could.
@@ -203,6 +203,7 @@ contract Deploy is Script {
         vm.serializeAddress(json, "launchDeployer", address(launchDeployer));
         vm.serializeAddress(json, "rewardTokenDeployer", address(rewardTokenDeployer));
         vm.serializeAddress(json, "revenueSplitter", address(_splitter));
+        vm.serializeAddress(json, "swapRouter", address(swapRouter));
         vm.serializeAddress(json, "buybackBurner", address(_burner));
         vm.serializeAddress(json, "graduationGuard", address(factory.graduationGuard()));
         vm.serializeAddress(json, "poolManager", A.UNISWAP_V4_POOL_MANAGER);
@@ -233,15 +234,24 @@ contract Deploy is Script {
      * that turns 25% of $POP's creator fees into burned $POP (immutable).
      * The owner starts as the burner's keeper and can hand that to a bot.
      */
-    function _revenue(address owner, PopFeeEscrow escrow) private {
-        _splitter = new PopRevenueSplitter(owner, IPopFeeEscrow(address(escrow)), IERC20(A.PONS), HOLDER_SHARE_BPS);
+    function _revenue(address owner, PopFeeEscrow escrow, PopQuoteRegistry registry) private {
+        _splitter = new PopRevenueSplitter(
+            owner,
+            IPopFeeEscrow(address(escrow)),
+            IERC20(A.PONS),
+            HOLDER_SHARE_BPS,
+            IPopQuoteRegistry(address(registry)),
+            A.WETH
+        );
         _burner = new PopBuybackBurner(
             owner,
             IPoolManager(A.UNISWAP_V4_POOL_MANAGER),
             IPopFeeEscrow(address(escrow)),
             IERC20(A.PONS),
             owner,
-            BURN_SHARE_BPS
+            BURN_SHARE_BPS,
+            IPopQuoteRegistry(address(registry)),
+            A.WETH
         );
     }
 

@@ -7,15 +7,28 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
-import {IPopFeeEscrow} from "./interfaces/IPop.sol";
+import {IPopFeeEscrow, IPopQuoteRegistry} from "./interfaces/IPop.sol";
+
+interface IUniswapV3PoolBurnerSwap {
+    function swap(
+        address recipient,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1);
+}
 
 /**
  * @title PopBuybackBurner
@@ -49,19 +62,29 @@ contract PopBuybackBurner is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     error DeadlineExpired();
     error TooLittleOut(uint256 amountOut, uint256 minOut);
     error InsufficientBudget(uint256 budget, uint256 requested);
+    error NotConversionPool();
+    error ConversionSlippage(uint256 actual, uint256 minimum);
 
     event KeeperUpdated(address keeper);
     event PoolSet(address popToken);
     event Distributed(uint256 toOwner, uint256 toBuyback);
     event BoughtAndBurned(uint256 quoteIn, uint256 popBurned);
+    event WethConverted(uint256 wethIn, uint256 quoteOut);
 
     uint16 private constant BASIS_POINTS = 10_000;
     address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
+    // Worst execution the WETH conversion accepts against the quote's
+    // 30-minute TWAP; retryable, so manipulation delays rather than
+    // repricing.
+    uint256 private constant MAX_CONVERSION_SLIPPAGE_BPS = 500;
 
     IPoolManager public immutable poolManager;
     IPopFeeEscrow public immutable feeEscrow;
-    /// @notice The asset creator fees arrive in ($PONS).
+    /// @notice The asset creator fees settle in ($PONS).
     IERC20 public immutable quoteAsset;
+    IPopQuoteRegistry public immutable quoteRegistry;
+    /// @notice Curve-phase creator fees arrive in WETH before conversion.
+    address public immutable weth;
     /// @notice Share of distributed creator fees retained as buyback budget.
     uint16 public immutable burnShareBps;
 
@@ -72,22 +95,29 @@ contract PopBuybackBurner is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     /// @notice The $POP token, derived from the pool key. Zero until set.
     address public popToken;
 
+    address private _conversionPoolInFlight;
+
     constructor(
         address owner_,
         IPoolManager poolManager_,
         IPopFeeEscrow feeEscrow_,
         IERC20 quoteAsset_,
         address keeper_,
-        uint16 burnShareBps_
+        uint16 burnShareBps_,
+        IPopQuoteRegistry quoteRegistry_,
+        address weth_
     ) Ownable(owner_) {
         if (
             address(poolManager_) == address(0) || address(feeEscrow_) == address(0)
                 || address(quoteAsset_) == address(0)
         ) revert ZeroAddress();
+        if (address(quoteRegistry_) == address(0) || weth_ == address(0)) revert ZeroAddress();
         if (burnShareBps_ > BASIS_POINTS) revert InvalidBps();
         poolManager = poolManager_;
         feeEscrow = feeEscrow_;
         quoteAsset = quoteAsset_;
+        quoteRegistry = quoteRegistry_;
+        weth = weth_;
         keeper = keeper_;
         burnShareBps = burnShareBps_;
         emit KeeperUpdated(keeper_);
@@ -125,6 +155,54 @@ contract PopBuybackBurner is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             ? feeEscrow.claimToken(address(quoteAsset))
             : 0;
         if (claimed == 0) revert NothingToDistribute();
+        _split(claimed);
+    }
+
+    /**
+     * @notice Claims accrued WETH creator fees ($POP's curve phase),
+     * market-buys the quote asset with them on the quote's canonical origin
+     * pool (bounded by TWAP and the caller's floor), and splits the proceeds
+     * like any distributed revenue.
+     */
+    function convertAndDistribute(uint256 minQuoteOut) external nonReentrant {
+        if (feeEscrow.balanceOfToken(address(this), weth) != 0) {
+            feeEscrow.claimToken(weth);
+        }
+        uint256 wethBalance = IERC20(weth).balanceOf(address(this));
+        if (wethBalance == 0) revert NothingToDistribute();
+
+        (address pool, uint256 quotePerEthTwap) = quoteRegistry.bondConversion(address(quoteAsset));
+        uint256 twapFloor = FullMath.mulDiv(
+            FullMath.mulDiv(wethBalance, quotePerEthTwap, 1e18),
+            BASIS_POINTS - MAX_CONVERSION_SLIPPAGE_BPS,
+            BASIS_POINTS
+        );
+        uint256 floor = minQuoteOut > twapFloor ? minQuoteOut : twapFloor;
+
+        bool zeroForOne = weth < address(quoteAsset);
+        uint256 balanceBefore = quoteAsset.balanceOf(address(this));
+        _conversionPoolInFlight = pool;
+        IUniswapV3PoolBurnerSwap(pool).swap(
+            address(this),
+            zeroForOne,
+            SafeCast.toInt256(wethBalance),
+            zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1,
+            ""
+        );
+        _conversionPoolInFlight = address(0);
+        uint256 quoteOut = quoteAsset.balanceOf(address(this)) - balanceBefore;
+        if (quoteOut < floor) revert ConversionSlippage(quoteOut, floor);
+        emit WethConverted(wethBalance, quoteOut);
+        _split(quoteOut);
+    }
+
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external {
+        if (msg.sender != _conversionPoolInFlight) revert NotConversionPool();
+        uint256 owed = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        IERC20(weth).safeTransfer(msg.sender, owed);
+    }
+
+    function _split(uint256 claimed) private {
         uint256 toOwner = (claimed * (BASIS_POINTS - burnShareBps)) / BASIS_POINTS;
         if (toOwner != 0) quoteAsset.safeTransfer(owner(), toOwner);
         emit Distributed(toOwner, claimed - toOwner);

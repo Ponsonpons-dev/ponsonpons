@@ -32,16 +32,16 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * ## Eligibility
  *
  * Contracts that structurally hold supply cannot claim, so rewards routed to
- * them would be burnt in place. The excluded set, the bonding curve, the
- * factory and its graduation executor, the locker, the V4 PoolManager, the
- * dead address, and this contract, is fixed at construction and can never
+ * them would be burnt in place. The excluded set, the factory, the hook, the
+ * locker, the V4 PoolManager, the dead address, and this contract, is fixed
+ * at construction and can never
  * be changed by anyone. Excluded balances are removed from `totalEligible`,
  * so the pool's own float does not dilute real holders.
  *
  * ## Funding
  *
  * `sync()` is permissionless and takes no arguments: it credits whatever
- * reward asset has arrived since the last call. The curve and the hook push
+ * reward asset has arrived since the last call. The factory and the hook push
  * their holder-reward carve-out with a plain transfer, and anyone, a
  * creator, a community member, an airdropper, can top the pot up the same
  * way. Rewards arriving while nothing is eligible stay buffered, uncounted,
@@ -74,7 +74,7 @@ contract PopRewardToken is ERC20, ReentrancyGuard {
 
     address public immutable deployer;
     address public immutable launchFactory;
-    address public immutable curve;
+    address public immutable supplyRecipient;
     /// @notice The quote token this launch trades in; the asset holders earn.
     IERC20 public immutable rewardAsset;
 
@@ -105,33 +105,33 @@ contract PopRewardToken is ERC20, ReentrancyGuard {
         string memory description_,
         Socials memory socials_,
         address deployer_,
-        address curve_,
+        address supplyRecipient_,
         address launchFactory_,
         address rewardAsset_,
         uint256 supply_,
         address[] memory excluded_
     ) ERC20(name_, symbol_) {
-        if (deployer_ == address(0) || curve_ == address(0) || launchFactory_ == address(0)) {
+        if (deployer_ == address(0) || supplyRecipient_ == address(0) || launchFactory_ == address(0)) {
             revert ZeroAddress();
         }
         if (rewardAsset_ == address(0)) revert ZeroAddress();
 
         deployer = deployer_;
         launchFactory = launchFactory_;
-        curve = curve_;
+        supplyRecipient = supplyRecipient_;
         rewardAsset = IERC20(rewardAsset_);
         logo = logo_;
         description = description_;
         _socials = socials_;
 
         // Populated before the mint below, so the initial supply lands in an
-        // already-excluded curve and `totalEligible` correctly starts at zero.
+        // already-excluded factory and `totalEligible` correctly starts at zero.
         excluded[address(this)] = true;
         for (uint256 i = 0; i < excluded_.length; ++i) {
             if (excluded_[i] != address(0)) excluded[excluded_[i]] = true;
         }
 
-        _mint(curve_, supply_);
+        _mint(supplyRecipient_, supply_);
     }
 
     // ------------------------------------------------------------------

@@ -8,6 +8,10 @@ import {MockQuoteAdapter} from "../mocks/MockQuoteAdapter.sol";
 import {PopFixture} from "../utils/PopFixture.sol";
 
 contract QuoteRegistryTest is PopFixture {
+    // Quote-denominated legacy economics (4.2 ETH target at the mock TWAP).
+    uint256 internal constant EXPECTED_THRESHOLD = 420_000 ether;
+    uint256 internal constant EXPECTED_PHANTOM = 168_000 ether;
+
     function test_listing_isPermissionlessButRuleBound() public {
         MockERC20 candidate = new MockERC20("Hmm", "HMM", 18);
 
@@ -62,20 +66,19 @@ contract QuoteRegistryTest is PopFixture {
         registry.getLaunchEconomics(address(quote));
 
         // And therefore launching on it fails, with no admin involved.
-        address[] memory noExemptions;
         vm.prank(creator);
         vm.expectRevert(
             abi.encodeWithSelector(PopQuoteRegistry.InsufficientLockedLiquidity.selector, 1 ether, 25 ether)
         );
         factory.launchToken{value: LAUNCH_FEE}(
-            defaultParams("X", CashbackConfig(CashbackMode.None, 0), 0), 0, address(quote), 0, 0, noExemptions
+            defaultParams("X", CashbackConfig(CashbackMode.None, 0), 0), 0, address(quote), 0
         );
 
-        // Liquidity recovers → launches resume, permissionlessly.
+        // Liquidity recovers, launches resume, permissionlessly.
         adapter.set(address(quote), true, 400 ether, QUOTE_PER_ETH);
         vm.prank(creator);
         factory.launchToken{value: LAUNCH_FEE}(
-            defaultParams("X", CashbackConfig(CashbackMode.None, 0), 0), 0, address(quote), 0, 0, noExemptions
+            defaultParams("X", CashbackConfig(CashbackMode.None, 0), 0), 0, address(quote), 0
         );
     }
 
@@ -129,7 +132,7 @@ contract QuoteRegistryTest is PopFixture {
         registry.renounceOwnership();
 
         // Adapters append; ids are stable.
-        MockQuoteAdapter second = new MockQuoteAdapter();
+        MockQuoteAdapter second = new MockQuoteAdapter(address(weth));
         vm.prank(timelock);
         uint256 id = registry.addAdapter(second);
         assertEq(id, 1);

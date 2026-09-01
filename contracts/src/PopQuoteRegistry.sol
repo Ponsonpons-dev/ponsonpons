@@ -234,6 +234,39 @@ contract PopQuoteRegistry is IPopQuoteRegistry, Ownable2Step {
     // ---------------------------------------------------------------------
 
     /// @inheritdoc IPopQuoteRegistry
+    function ethLaunchEconomics(address quote)
+        external
+        view
+        returns (uint256 phantomEth, uint256 bondThresholdEth)
+    {
+        QuoteInfo memory info = quotes[quote];
+        if (!info.listed) revert NotListed();
+        if (info.paused) revert QuotePaused();
+        // The liquidity floor and graduation proof are enforced live, at
+        // every launch: a quote whose locked backing collapsed, or whose
+        // origin somehow stopped reporting it graduated, stops hosting new
+        // launches immediately and permissionlessly.
+        _requireQualified(adapters[info.adapterId], quote);
+        bondThresholdEth = graduationTargetEth;
+        phantomEth = (bondThresholdEth * PHANTOM_NUMERATOR) / PHANTOM_DENOMINATOR;
+        if (phantomEth == 0) revert InvalidEconomics();
+    }
+
+    /// @inheritdoc IPopQuoteRegistry
+    function bondConversion(address quote) external view returns (address pool, uint256 quotePerEthTwap) {
+        QuoteInfo memory info = quotes[quote];
+        if (!info.listed) revert NotListed();
+        IPopQuoteAdapter adapter = adapters[info.adapterId];
+        (pool,) = adapter.conversionPool(quote);
+        quotePerEthTwap = adapter.quotePerEth(quote, TWAP_WINDOW);
+        if (quotePerEthTwap == 0) revert InvalidEconomics();
+    }
+
+    /**
+     * @notice Quote-denominated economics kept for off-chain reference and
+     * historical tooling; the launch path itself now prices its curve in ETH
+     * via `ethLaunchEconomics`.
+     */
     function getLaunchEconomics(address quote)
         external
         view

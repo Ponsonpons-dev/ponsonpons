@@ -27,4 +27,12 @@ interface IPopQuoteAdapter {
      * @return quotePerEth Token base units per 1e18 wei of ETH.
      */
     function quotePerEth(address token, uint32 twapWindow) external view returns (uint256);
+
+    /**
+     * @notice The origin's canonical WETH-paired pool for `token`, used by
+     * the factory to convert a bonded launch's raised WETH into the quote.
+     * @return pool The Uniswap V3 pool address.
+     * @return quoteIsToken0 True when `token` sorts below WETH in the pool.
+     */
+    function conversionPool(address token) external view returns (address pool, bool quoteIsToken0);
 }

@@ -5,12 +5,16 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {Test} from "forge-std/Test.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 
 import {RobinhoodChainAddresses as A} from "../../src/Addresses.sol";
-import {PopBondingCurve} from "../../src/PopBondingCurve.sol";
 import {PopFeeEscrow} from "../../src/PopFeeEscrow.sol";
 import {PopGraduationExecutor} from "../../src/PopGraduationExecutor.sol";
 import {PopHook} from "../../src/PopHook.sol";
@@ -20,24 +24,24 @@ import {PopLaunchToken} from "../../src/PopLaunchToken.sol";
 import {PopLocker} from "../../src/PopLocker.sol";
 import {PopQuoteRegistry} from "../../src/PopQuoteRegistry.sol";
 import {PopRewardTokenDeployer} from "../../src/PopRewardTokenDeployer.sol";
+import {PopSwapRouter} from "../../src/PopSwapRouter.sol";
 import {
     IPonsV1LaunchFactory,
     IUniswapV3FactoryLike,
     PonsV1QuoteAdapter
 } from "../../src/adapters/PonsV1QuoteAdapter.sol";
-import {
-    CashbackConfig,
-    CashbackMode,
-    GraduationPhase,
-    IPopFeeEscrow,
-    IPopQuoteRegistry
-} from "../../src/interfaces/IPop.sol";
+import {CashbackConfig, CashbackMode, IPopFeeEscrow, IPopQuoteRegistry, LaunchPhase} from "../../src/interfaces/IPop.sol";
+
+interface IWETHFork {
+    function deposit() external payable;
+}
 
 /// @notice End-to-end tests against a Robinhood Chain mainnet fork: the real
 /// Pons v1 factories (graduation proof + TWAP for $PONS), the real canonical
-/// Uniswap V4 PoolManager/PositionManager/Permit2, and a live $POP launch
-/// quoted in real $PONS from curve to locked V4 position.
-/// Run with: ROBINHOOD_RPC_URL=... forge test --match-path "test/fork/*"
+/// Uniswap V4 PoolManager/PositionManager/Permit2, the real WETH, and a live
+/// $POP v2 launch whose curve trades in real WETH and whose bond executes a
+/// real WETH -> PONS market buy on the real Pons V3 pool.
+/// Run with: RUN_FORK_TESTS=true ROBINHOOD_RPC_URL=... forge test --match-path "test/fork/*"
 contract RobinhoodForkTest is Test {
     PonsV1QuoteAdapter internal adapter;
     PopQuoteRegistry internal registry;
@@ -46,6 +50,7 @@ contract RobinhoodForkTest is Test {
     PopLocker internal locker;
     PopFeeEscrow internal escrow;
     PopGraduationExecutor internal executor;
+    PopSwapRouter internal router;
 
     address internal timelock = makeAddr("timelock");
     address internal treasury = makeAddr("treasury");
@@ -53,12 +58,9 @@ contract RobinhoodForkTest is Test {
     address internal whale = makeAddr("whale");
 
     /// @dev The block this suite is pinned to. Its *state* is long pruned from
-    /// the public endpoint, Robinhood Chain keeps only a few thousand blocks
-    /// of it, minutes at Orbit block times, so the run is served from the RPC
-    /// cache committed under `test/fork/cache/`. Re-pin and regenerate that
-    /// cache together with `script/warm-fork-cache.sh`; the two must match.
-    /// Override with FORK_BLOCK, or FORK_BLOCK=0 to fork from the head (which
-    /// needs an archive endpoint or a very fresh block).
+    /// the public endpoint, so the run is served from the RPC cache committed
+    /// under `test/fork/cache/` (or a fresh archive endpoint). Re-pin and
+    /// regenerate the cache together with `script/warm-fork-cache.sh`.
     uint256 internal constant PINNED_FORK_BLOCK = 51091865;
 
     bool internal forkEnabled;
@@ -69,15 +71,9 @@ contract RobinhoodForkTest is Test {
     }
 
     function setUp() public {
-        // Opt-in: fork tests hit mainnet RPC and are not part of the default
-        // suite. Enable with RUN_FORK_TESTS=true (plus ROBINHOOD_RPC_URL to
-        // override the public endpoint).
         forkEnabled = vm.envOr("RUN_FORK_TESTS", false);
         if (!forkEnabled) return;
         string memory rpc = vm.envOr("ROBINHOOD_RPC_URL", string("https://rpc.mainnet.chain.robinhood.com"));
-        // Pinning makes a run reproducible for auditors, and it is required
-        // against the public endpoint, which refuses state queries at its own
-        // head block. State for the pin comes from the committed RPC cache.
         uint256 forkBlock = vm.envOr("FORK_BLOCK", PINNED_FORK_BLOCK);
         if (forkBlock == 0) {
             vm.createSelectFork(rpc);
@@ -127,6 +123,7 @@ contract RobinhoodForkTest is Test {
             hook,
             IPopFeeEscrow(address(escrow)),
             IPopQuoteRegistry(address(registry)),
+            A.WETH,
             0.0005 ether
         );
         executor = new PopGraduationExecutor(
@@ -139,61 +136,44 @@ contract RobinhoodForkTest is Test {
         factory.setGraduationExecutor(executor);
         factory.setLaunchDeployer(launchDeployer);
         factory.addLaunchConfig(
-            PopLaunchFactory.LaunchConfig({
-                supply: 1_000_000_000 ether, curveFeeBps: 100, poolFee: 0, tickSpacing: 200, enabled: true
-            })
+            PopLaunchFactory.LaunchConfig({supply: 1_000_000_000 ether, poolFee: 0, tickSpacing: 200, enabled: true})
         );
         factory.setLaunchEnabled(true);
         hook.setFactory(address(factory));
         locker.setFactory(address(factory));
         vm.stopPrank();
 
-        vm.deal(creator, 1 ether);
+        router = new PopSwapRouter(factory);
+
+        vm.deal(creator, 2 ether);
+        vm.deal(whale, 50 ether);
     }
 
     function test_adapter_provesRealPonsGraduation() public onFork {
         (bool graduated, uint256 ethPrincipal) = adapter.verify(A.PONS);
         assertTrue(graduated);
-        // $PONS held ~414 WETH of locked principal at discovery time; allow
-        // wide drift but require it comfortably above the listing floor.
         assertGt(ethPrincipal, 25 ether);
-
-        // A random address is not a Pons token.
-        assertFalse(_verifyReverts(A.PONS));
-        assertTrue(_verifyReverts(address(0xdead)));
+        (address pool,) = adapter.conversionPool(A.PONS);
+        assertTrue(pool != address(0), "real conversion pool");
     }
 
-    function _verifyReverts(address token) internal view returns (bool reverted) {
-        try adapter.verify(token) returns (bool, uint256) {
-            return false;
-        } catch {
-            return true;
-        }
-    }
-
-    function test_registry_listsRealPonsWithSaneEconomics() public onFork {
+    function test_registry_listsRealPonsWithEthEconomics() public onFork {
         registry.listQuote(A.PONS, 0);
-        (uint256 phantom, uint256 threshold, uint8 decimals) = registry.getLaunchEconomics(A.PONS);
-        assertEq(decimals, 18);
-        assertEq(phantom, threshold * 2 / 5);
-
-        // Sanity: the threshold should be 4.2 ETH worth of PONS. At
-        // discovery, PONS traded around 4e-6 ETH, implying a threshold on
-        // the order of 1M PONS. Accept two orders of magnitude either way,
-        // the assertion is against nonsense (0 or astronomic), not price.
-        assertGt(threshold, 10_000 ether);
-        assertLt(threshold, 1_000_000_000 ether);
+        (uint256 phantomEth, uint256 thresholdEth) = registry.ethLaunchEconomics(A.PONS);
+        assertEq(thresholdEth, 4.2 ether);
+        assertEq(phantomEth, 1.68 ether);
+        (address pool, uint256 twap) = registry.bondConversion(A.PONS);
+        assertTrue(pool != address(0));
+        assertGt(twap, 0);
     }
 
-    function test_fullLaunch_onRealV4_withRealPons() public onFork {
+    function test_fullLaunch_ethCurve_realBondIntoRealPons() public onFork {
         registry.listQuote(A.PONS, 0);
-        (, uint256 threshold,) = registry.getLaunchEconomics(A.PONS);
 
-        address[] memory noExemptions;
         vm.prank(creator);
-        (address t, address c) = factory.launchToken{value: 0.0005 ether}(
+        address t = factory.launchToken{value: 0.0005 ether}(
             PopLaunchFactory.TokenParams({
-                name: "Pop Fork Test",
+                name: "Pop Fork V2",
                 symbol: "POPF",
                 logo: "",
                 description: "",
@@ -202,34 +182,52 @@ contract RobinhoodForkTest is Test {
                 creatorFeeBps: 100,
                 cashback: CashbackConfig(CashbackMode.QuoteBurn, 5_000),
                 expectedEconomics: bytes32(0),
-                salt: bytes32("fork")
+                salt: bytes32("fork-v2")
             }),
             0,
             A.PONS,
-            0,
-            0,
-            noExemptions
+            0
         );
-        PopBondingCurve curve = PopBondingCurve(c);
 
-        // Fund a whale with real PONS via storage and buy the curve out.
+        // A third-party bot router trades the curve with real WETH from
+        // block one.
         vm.warp(block.timestamp + 61);
-        uint256 offered = threshold * 3;
-        deal(A.PONS, whale, offered);
         vm.startPrank(whale);
-        IERC20(A.PONS).approve(c, offered);
-        curve.buy(offered, 0, whale, block.timestamp);
+        PoolSwapTest botRouter = new PoolSwapTest(IPoolManager(A.UNISWAP_V4_POOL_MANAGER));
+        IWETHFork(A.WETH).deposit{value: 20 ether}();
+        IERC20(A.WETH).approve(address(botRouter), type(uint256).max);
+        PoolKey memory curveKey = factory.curvePoolKey(t);
+        bool zeroForOne = A.WETH < t;
+        botRouter.swap(
+            curveKey,
+            SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: -int256(10 ether),
+                sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
         vm.stopPrank();
+        assertGt(IERC20(t).balanceOf(whale), 0, "bot bought the curve");
+        assertTrue(factory.isBondReady(t), "10 ETH filled the 4.2 ETH curve");
 
-        assertTrue(curve.graduated());
-        assertEq(uint8(factory.getLaunchedToken(t).phase), uint8(GraduationPhase.Swept));
+        // Bond: burns the curve position, market-buys real PONS on the real
+        // V3 pool, seeds the locked token/PONS pool.
+        uint256 positionId = IPositionManager(A.UNISWAP_V4_POSITION_MANAGER).nextTokenId();
+        factory.bond(t, 0);
 
-        // Seed the pool on the REAL canonical PoolManager and lock the
-        // position in our locker.
-        uint256 positionId = factory.createGraduatedPool(t);
-        assertEq(uint8(factory.getLaunchedToken(t).phase), uint8(GraduationPhase.PoolCreated));
+        assertEq(uint8(factory.getLaunchedToken(t).phase), uint8(LaunchPhase.Bonded));
         assertEq(IERC721(A.UNISWAP_V4_POSITION_MANAGER).ownerOf(positionId), address(locker));
         assertTrue(locker.isLocked(t));
-        assertGt(locker.lockedTokenSupply(t), 0);
+        (uint160 sqrtPrice,,,) =
+            StateLibrary.getSlot0(IPoolManager(A.UNISWAP_V4_POOL_MANAGER), factory.bondedPoolKey(t).toId());
+        assertGt(sqrtPrice, 0, "bonded PONS pool live");
+
+        // Post-bond: an ETH buy through the convenience router routes via
+        // the real V3 pool into the real V4 bonded pool.
+        vm.prank(whale);
+        uint256 out = router.buyWithEth{value: 0.5 ether}(t, 0, block.timestamp);
+        assertGt(out, 0, "post-bond ETH buy");
     }
 }

@@ -120,6 +120,14 @@ contract PonsV1QuoteAdapter is IPopQuoteAdapter {
         return FullMath.mulDiv(ratioX192, 1e18, 1 << 192);
     }
 
+    /// @inheritdoc IPopQuoteAdapter
+    function conversionPool(address token) external view returns (address pool, bool quoteIsToken0) {
+        (, IPonsV1LaunchFactory.LaunchedToken memory launched) = _launchRecord(token);
+        pool = v3Factory.getPool(token, weth, launched.poolFee);
+        if (pool == address(0)) revert PoolNotFound();
+        quoteIsToken0 = token < weth;
+    }
+
     /**
      * @dev Finds the v1 factory generation that launched `token`. Both
      * generations are checked because graduated tokens exist on each, and a
