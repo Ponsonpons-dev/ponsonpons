@@ -7,6 +7,7 @@ import { LaunchList, QuoteList, ViewToggle, useView } from "@/components/LaunchV
 import { LaunchCard, QuoteCard } from "@/components/cards";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { indexer } from "@/lib/indexer";
+import { useUsdRates } from "@/lib/usd";
 
 function SectionHead({
   eyebrow,
@@ -41,11 +42,21 @@ export default function HomePage() {
   const quotes = useQuery({ queryKey: ["quotes"], queryFn: indexer.quotes });
   const trending = useQuery({ queryKey: ["trending"], queryFn: () => indexer.trending() });
   const graduated = useQuery({ queryKey: ["bonded"], queryFn: () => indexer.recentlyBonded() });
+  // Protocol totals drive the hero metrics and refresh while the page is open.
+  const totals = useQuery({
+    queryKey: ["protocol-totals"],
+    queryFn: indexer.protocolTotals,
+    refetchInterval: 10_000,
+  });
 
   const [view, setView] = useView();
+  const rates = useUsdRates(quotes.data?.map((q) => q.address) ?? []);
+  // PONS is the protocol's own quote and the denomination of every headline
+  // total, so its rate is the one the hero needs.
+  const ponsAddress = quotes.data?.find((q) => q.symbol === "PONS")?.address;
   const quoteMeta = new Map(quotes.data?.map((q) => [q.address.toLowerCase(), q]) ?? []);
   const quoteFor = (l: { quoteToken: string }) => quoteMeta.get(l.quoteToken.toLowerCase());
-  const totals = quotes.data?.reduce(
+  const quoteTotals = quotes.data?.reduce(
     (acc, q) => ({ launches: acc.launches + q.launchCount, graduated: acc.graduated + q.graduatedCount }),
     { launches: 0, graduated: 0 },
   );
@@ -54,8 +65,11 @@ export default function HomePage() {
     <div className="space-y-20 sm:space-y-24">
       <Landing
         quoteCount={quotes.data?.length}
-        launchCount={totals?.launches}
-        graduatedCount={totals?.graduated}
+        launchCount={quoteTotals?.launches}
+        graduatedCount={quoteTotals?.graduated}
+        totals={totals.data}
+        ponsUsd={rates.quoteUsd(ponsAddress ?? "")}
+        ethUsd={rates.ethUsd}
       />
 
       <section>

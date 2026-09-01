@@ -3,10 +3,36 @@
 import Link from "next/link";
 
 import { explorerAddress } from "@/lib/addresses";
+import { useEffect, useState } from "react";
+
 import { shortAddr } from "@/lib/format";
 
-function ipfsUrl(logo: string) {
-  return logo.startsWith("ipfs://") ? `https://ipfs.io/ipfs/${logo.slice(7)}` : logo;
+/**
+ * Gateways to try in order for one IPFS logo. Public gateways rate-limit and
+ * time out constantly, so a single one means blank artwork for real users;
+ * `useIpfsSrc` walks this list before giving up and letting the caller draw
+ * its own fallback.
+ */
+const IPFS_GATEWAYS = [
+  "https://gateway.pinata.cloud/ipfs/",
+  "https://ipfs.io/ipfs/",
+  "https://dweb.link/ipfs/",
+];
+
+/**
+ * Resolves a logo to a displayable src, advancing through the gateway list on
+ * each load error. Returns null once every gateway has failed (or when there
+ * is no logo at all), which is the caller's cue to render its placeholder.
+ */
+function useIpfsSrc(logo: string): { src: string | null; onError: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const cid = logo.startsWith("ipfs://") ? logo.slice(7) : null;
+  // Reset when the token changes, so one broken logo cannot poison the next.
+  useEffect(() => setAttempt(0), [logo]);
+  if (!logo) return { src: null, onError: () => {} };
+  if (!cid) return { src: attempt === 0 ? logo : null, onError: () => setAttempt(1) };
+  const src = attempt < IPFS_GATEWAYS.length ? `${IPFS_GATEWAYS[attempt]}${cid}` : null;
+  return { src, onError: () => setAttempt((a) => a + 1) };
 }
 
 /** Stable hue from an address so a logo-less token always gets the same tile. */
@@ -56,7 +82,7 @@ export function AddressLink({ address, label }: { address: string; label?: strin
 }
 
 export function TokenLogo({ logo, symbol, size = 40 }: { logo: string; symbol: string; size?: number }) {
-  const src = logo ? ipfsUrl(logo) : "";
+  const { src, onError } = useIpfsSrc(logo);
   if (!src) {
     return (
       <div
@@ -76,7 +102,7 @@ export function TokenLogo({ logo, symbol, size = 40 }: { logo: string; symbol: s
       height={size}
       className="shrink-0 rounded-full border border-edge bg-ink/[0.05] object-cover"
       style={{ width: size, height: size }}
-      onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+      onError={onError}
     />
   );
 }
@@ -87,7 +113,7 @@ export function TokenLogo({ logo, symbol, size = 40 }: { logo: string; symbol: s
  * pinned so every tile still sits inside the site's palette.
  */
 export function TokenTile({ logo, symbol, seed }: { logo: string; symbol: string; seed: string }) {
-  const src = logo ? ipfsUrl(logo) : "";
+  const { src, onError } = useIpfsSrc(logo);
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
@@ -95,10 +121,11 @@ export function TokenTile({ logo, symbol, seed }: { logo: string; symbol: string
         src={src}
         alt={symbol}
         className="aspect-square w-full rounded-[12px] border border-edge bg-ink/[0.05] object-cover"
-        onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")}
+        onError={onError}
       />
     );
   }
+  // Every gateway failed, or the launch never set a logo: draw the tile.
   const hue = seedHue(seed);
   return (
     <div

@@ -103,18 +103,46 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
         />
         {launch.cashbackMode === 3 ? (
           <Stat
-            label={`Rewards (${qs})`}
-            value={fmtAmount(launch.holderRewardsQuote, qd)}
+            label="Paid to holders"
+            value={
+              fmtUsd(toWhole(launch.holderRewardsQuote, qd), rates.quoteUsd(launch.quoteToken)) ??
+              `${fmtAmount(launch.holderRewardsQuote, qd)} ${qs}`
+            }
             accent="text-up"
           />
         ) : (
           <Stat
-            label={`Burned (${qs})`}
-            value={fmtAmount(launch.burnedQuote, qd)}
+            label="Burned forever"
+            value={
+              fmtUsd(toWhole(launch.burnedQuote, qd), rates.quoteUsd(launch.quoteToken)) ??
+              `${fmtAmount(launch.burnedQuote, qd)} ${qs}`
+            }
             accent="text-burn"
           />
         )}
       </div>
+
+      {launch.phase !== 0 && (
+        // What graduation actually did: the raise it converted and the quote
+        // it bought, both now locked in the pool this token trades in.
+        <div className="grid grid-cols-2 gap-2">
+          <Stat
+            label="Raised into liquidity"
+            value={
+              fmtUsd(toWhole(launch.ethConverted ?? "0", 18), rates.ethUsd) ??
+              `${fmtAmount(launch.ethConverted ?? "0", 18)} ETH`
+            }
+          />
+          <Stat
+            label={`${qs} bought at graduation`}
+            value={
+              fmtUsd(toWhole(launch.quoteBought ?? "0", qd), rates.quoteUsd(launch.quoteToken)) ??
+              `${fmtAmount(launch.quoteBought ?? "0", qd)} ${qs}`
+            }
+            accent="text-pop"
+          />
+        </div>
+      )}
 
       {launch.phase === 0 && (
         <div className="card p-3">

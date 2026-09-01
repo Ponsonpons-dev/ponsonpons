@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { fmtUsd } from "@/lib/usd";
+
 import { ArrowRight, Check, Droplet, Flame, Lock } from "./icons";
 
 const STEPS = [
@@ -82,11 +84,29 @@ export function Landing({
   quoteCount,
   launchCount,
   graduatedCount,
+  totals,
+  ponsUsd,
+  ethUsd,
 }: {
   quoteCount?: number;
   launchCount?: number;
   graduatedCount?: number;
+  /** Protocol-wide sums, refreshed live; undefined until the first fetch. */
+  totals?: {
+    quoteBought: bigint;
+    ethConverted: bigint;
+    burned: bigint;
+    holderRewards: bigint;
+  };
+  ponsUsd?: number | null;
+  ethUsd?: number | null;
 }) {
+  const whole = (v?: bigint) => (v === undefined ? null : Number(v) / 1e18);
+  const usdOr = (v?: bigint, rate?: number | null, unit = "PONS") => {
+    const w = whole(v);
+    if (w === null) return "…";
+    return fmtUsd(w, rate ?? null) ?? `${w.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}`;
+  };
   return (
     <div className="space-y-20 sm:space-y-28">
       {/* ── Hero ───────────────────────────────────────────────────────── */}
@@ -144,6 +164,15 @@ export function Landing({
           <Stat value={quoteCount ?? "…"} label="Quote tokens" />
           <Stat value={launchCount ?? "…"} label="Launches" />
           <Stat value={graduatedCount ?? "…"} label="Bonded" />
+        </div>
+        <hr className="rule" />
+        {/* Live protocol totals: what graduations have actually bought and
+            what the cashback modes have actually paid out or destroyed. */}
+        <div className="grid grid-cols-2 gap-4 py-7 sm:grid-cols-4">
+          <Stat value={usdOr(totals?.quoteBought, ponsUsd)} label="Pons bought" />
+          <Stat value={usdOr(totals?.ethConverted, ethUsd, "ETH")} label="Raised into liquidity" />
+          <Stat value={usdOr(totals?.burned, ponsUsd)} label="Burned forever" />
+          <Stat value={usdOr(totals?.holderRewards, ponsUsd)} label="Paid to holders" />
         </div>
       </section>
 

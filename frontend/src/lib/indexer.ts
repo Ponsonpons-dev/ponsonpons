@@ -179,6 +179,35 @@ export const indexer = {
     return data.launchs.items;
   },
 
+  /**
+   * Protocol-wide totals for the landing page. Ponder's GraphQL has no
+   * aggregate functions, so the sums are done here over a thin projection of
+   * every launch; the row count is small and the query stays cheap.
+   */
+  protocolTotals: async () => {
+    const data = await gql<{
+      launchs: {
+        items: Array<{
+          phase: number;
+          quoteBought: string | null;
+          ethConverted: string | null;
+          burnedQuote: string;
+          holderRewardsQuote: string;
+        }>;
+      };
+    }>(`query{ launchs(limit:1000){ items{ phase quoteBought ethConverted burnedQuote holderRewardsQuote } } }`);
+    const zero = { quoteBought: 0n, ethConverted: 0n, burned: 0n, holderRewards: 0n, bonded: 0, total: 0 };
+    return data.launchs.items.reduce((acc, l) => {
+      acc.total += 1;
+      if (l.phase === 1) acc.bonded += 1;
+      acc.quoteBought += BigInt(l.quoteBought ?? 0);
+      acc.ethConverted += BigInt(l.ethConverted ?? 0);
+      acc.burned += BigInt(l.burnedQuote);
+      acc.holderRewards += BigInt(l.holderRewardsQuote);
+      return acc;
+    }, zero);
+  },
+
   trades: (token: string) => get<Trade[]>(`/launches/${token.toLowerCase()}/trades`),
   candles: (token: string, interval: number) =>
     get<Candle[]>(`/launches/${token.toLowerCase()}/candles/${interval}`),
