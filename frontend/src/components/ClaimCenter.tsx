@@ -76,7 +76,11 @@ export function ClaimCenter() {
     };
   }, [open]);
 
-  if (!account || rows.length === 0) return null;
+  // The badge stays put for any connected wallet, muted when there is nothing
+  // owed: a header control that appears and vanishes reads as a glitch, and
+  // "claimed, now zero" is information worth showing rather than hiding.
+  if (!account) return null;
+  const hasFees = rows.length > 0;
 
   async function claimAll() {
     setBusy(true);
@@ -107,11 +111,19 @@ export function ClaimCenter() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex h-9 items-center gap-1.5 rounded-full border border-pop/40 bg-pop/10 px-3 text-[12.5px] font-semibold text-pop transition-colors hover:bg-pop/15"
+        className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
+          hasFees
+            ? "border-pop/40 bg-pop/10 text-pop hover:bg-pop/15"
+            : "border-edge bg-ink/[0.03] text-dim hover:text-ink"
+        }`}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-pop shadow-[0_0_6px_rgb(20_216_44_/_0.8)]" />
-        {totalUsd > 0 ? fmtUsd(totalUsd, 1) : "Fees"}
-        <span className="hidden sm:inline">claimable</span>
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            hasFees ? "bg-pop shadow-[0_0_6px_rgb(20_216_44_/_0.8)]" : "bg-dim/40"
+          }`}
+        />
+        {hasFees ? (fmtUsd(totalUsd, 1) ?? "Fees") : "$0.00"}
+        <span className="hidden sm:inline">{hasFees ? "claimable" : "in fees"}</span>
       </button>
 
       {open && (
@@ -123,22 +135,31 @@ export function ClaimCenter() {
           <div className="mb-2 text-[9.5px] font-medium uppercase tracking-[0.16em] text-dim/70">
             Your unclaimed fees
           </div>
-          <div className="space-y-1.5">
-            {rows.map((r) => (
-              <div key={r.address} className="flex items-baseline justify-between text-[13px]">
-                <span className="text-dim">{r.symbol}</span>
-                <span className="font-semibold tabular-nums text-ink">
-                  {fmtAmount(r.amount, r.decimals)}
-                </span>
+          {hasFees ? (
+            <>
+              <div className="space-y-1.5">
+                {rows.map((r) => (
+                  <div key={r.address} className="flex items-baseline justify-between text-[13px]">
+                    <span className="text-dim">{r.symbol}</span>
+                    <span className="font-semibold tabular-nums text-ink">
+                      {fmtAmount(r.amount, r.decimals)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <button type="button" className="btn-pop mt-3 w-full" disabled={busy} onClick={claimAll}>
-            {busy ? "Claiming…" : rows.length > 1 ? `Claim all (${rows.length} transactions)` : "Claim"}
-          </button>
-          <p className="mt-2 text-[11px] leading-relaxed text-dim/70">
-            Paid straight to your wallet from the fee escrow. One signature per asset.
-          </p>
+              <button type="button" className="btn-pop mt-3 w-full" disabled={busy} onClick={claimAll}>
+                {busy ? "Claiming…" : rows.length > 1 ? `Claim all (${rows.length} transactions)` : "Claim"}
+              </button>
+              <p className="mt-2 text-[11px] leading-relaxed text-dim/70">
+                Paid straight to your wallet from the fee escrow. One signature per asset.
+              </p>
+            </>
+          ) : (
+            <p className="text-[12.5px] leading-relaxed text-dim">
+              Nothing to claim right now. Fees from your launches are swept into the escrow every 15
+              minutes and appear here automatically.
+            </p>
+          )}
           {error && <div className="mt-2 text-[11.5px] text-down">{error}</div>}
         </div>
       )}
