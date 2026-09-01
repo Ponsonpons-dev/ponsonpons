@@ -115,6 +115,20 @@ async function bond(token) {
   if (inFlight.has(token)) return;
   inFlight.add(token);
   try {
+    // Sweep the curve pool first. Its launch-token fees can only convert
+    // against curve liquidity, and bonding moves that liquidity away for
+    // good, so anything left here strands and needs an owner-only rescue.
+    try {
+      const curveKey = await publicClient.readContract({
+        address: FACTORY,
+        abi: factoryAbi,
+        functionName: "curvePoolKey",
+        args: [token],
+      });
+      await sweepPool(poolIdOf(curveKey));
+    } catch (err) {
+      console.error(`pre-bond sweep(${token}) skipped: ${err.shortMessage ?? err.message}`);
+    }
     const { request } = await publicClient.simulateContract({
       account,
       address: FACTORY,

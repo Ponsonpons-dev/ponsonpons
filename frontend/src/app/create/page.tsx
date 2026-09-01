@@ -366,6 +366,15 @@ export default function CreatePage() {
                 onChange={(e) => set("cashbackShareBps")(Number(e.target.value))}
                 className="w-full accent-pop"
               />
+              {form.cashbackShareBps === 10000 && (
+                <p className="mt-2 rounded-[10px] border border-burn/30 bg-burn/[0.06] px-3 py-2 text-[12px] leading-relaxed text-burn">
+                  At 100%, your entire share of the base fee goes to{" "}
+                  {form.cashbackMode === 3 ? "your holders" : "the burn"}
+                  {form.creatorFeeBps === 0
+                    ? ", and with a 0% creator fee you earn nothing from this token, ever. These settings cannot be changed after launch."
+                    : `, so your only income is the ${(form.creatorFeeBps / 100).toFixed(2)}% creator fee. This cannot be changed after launch.`}
+                </p>
+              )}
             </div>
           )}
           <div>

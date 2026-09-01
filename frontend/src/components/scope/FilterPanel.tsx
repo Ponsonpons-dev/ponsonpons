@@ -142,7 +142,9 @@ export function FilterPanel({
           Cashback
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {[0, 1, 2, 3].map((mode) => {
+          {/* Mode 1 (trader rebate) retired with the standalone curve: no
+              launch can carry it, so offering it would only ever empty a column. */}
+          {[0, 2, 3].map((mode) => {
             const Icon = CASHBACK_ICON[mode];
             return (
               <Chip
@@ -177,6 +179,7 @@ export function FilterPanel({
           <NumField label="Min trades" value={filters.minTrades} onChange={(v) => set("minTrades", v)} />
           <NumField
             label="Min volume"
+            suffix="$"
             value={filters.minVolume}
             onChange={(v) => set("minVolume", v)}
             placeholder="any"

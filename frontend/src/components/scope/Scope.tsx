@@ -247,11 +247,11 @@ export function Scope() {
     const all = [...byToken.values()];
     return COLUMNS.map((c) => ({
       ...c,
-      launches: selectColumn(c.key, all).filter((l) => matches(l, filters[c.key], now, quoteDecimals)),
+      launches: selectColumn(c.key, all).filter((l) => matches(l, filters[c.key], now, quoteDecimals, rateFor)),
     }));
     // quoteDecimals is derived from quoteMap; listing it would rebuild every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launchesQ.data, graduatedQ.data, filters, now, quoteMap]);
+  }, [launchesQ.data, graduatedQ.data, filters, now, quoteMap, rates.ethUsd]);
 
   const loading = launchesQ.isLoading && graduatedQ.isLoading;
 

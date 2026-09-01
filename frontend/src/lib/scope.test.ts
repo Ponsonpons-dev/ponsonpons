@@ -206,3 +206,15 @@ test("the badge counts only what differs from the column's own baseline", () => 
   assert.equal(activeCount("filling", defaultsFor("filling")), 0);
   assert.equal(activeCount("filling", { ...defaultsFor("filling"), minProgress: 90, modes: [2] }), 2);
 });
+
+test("min volume reads as USD when a rate is supplied", () => {
+  // 2.2 ETH of curve volume at $2,500 is $5,500 of trading.
+  const rate = () => 2_500;
+  assert.equal(matches(launch(), f({ minVolume: 5_000 }), NOW, dec, rate), true);
+  assert.equal(matches(launch(), f({ minVolume: 6_000 }), NOW, dec, rate), false);
+});
+
+test("min volume falls back to native units without a rate", () => {
+  assert.equal(matches(launch(), f({ minVolume: 2.1 }), NOW, dec, () => null), true);
+  assert.equal(matches(launch(), f({ minVolume: 2.2 }), NOW, dec, () => null), false);
+});

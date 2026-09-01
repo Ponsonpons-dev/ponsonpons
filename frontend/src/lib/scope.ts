@@ -106,6 +106,12 @@ export function matches(
   f: Filters,
   now: number,
   quoteDecimals: (addr: string) => number,
+  /**
+   * USD per whole unit of the launch's denomination. Volume is displayed in
+   * dollars everywhere, so the bound is read in dollars too; without a rate
+   * it falls back to the native ledger so the filter still works offline.
+   */
+  usdRate?: (l: Launch) => number | null,
 ): boolean {
   const q = f.q.trim().toLowerCase();
   if (q && !`${launch.name} ${launch.symbol}`.toLowerCase().includes(q)) return false;
@@ -126,7 +132,8 @@ export function matches(
     const vol = launch.phase === 0
       ? toNum(launch.volumeEth, 18)
       : toNum(launch.volumeQuote, quoteDecimals(launch.quoteToken));
-    if (vol < f.minVolume) return false;
+    const rate = usdRate?.(launch) ?? null;
+    if ((rate === null ? vol : vol * rate) < f.minVolume) return false;
   }
 
   const ageMin = (now - Number(launch.createdAt)) / 60;
