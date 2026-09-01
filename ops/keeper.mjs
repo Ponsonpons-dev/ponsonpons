@@ -20,9 +20,15 @@
  * The revenue splitter's and burner's `distribute`/`convertAndDistribute`
  * cranks are permissionless and can be added here later.
  *
- * Env: KEEPER_PRIVATE_KEY (required), RPC_URL, FACTORY, HOOK, INDEXER_URL,
- *      CHECK_MS (2000), LIST_MS (30000), SWEEP_MS (900000, 0 disables),
- *      SWEEP_SLIPPAGE_BPS (700).
+ * Finally it cranks revenue on the same cadence: the splitter's and burner's
+ * `distribute` (permissionless, fixed recipients) and, once the buyback
+ * budget is worth the gas, the burner's `buyAndBurn`, which can only send
+ * what it buys to the dead address.
+ *
+ * Env: KEEPER_PRIVATE_KEY (required), RPC_URL, FACTORY, HOOK, SPLITTER,
+ *      BURNER, QUOTE, INDEXER_URL, CHECK_MS (2000), LIST_MS (30000),
+ *      SWEEP_MS (900000, 0 disables), SWEEP_SLIPPAGE_BPS (700),
+ *      MIN_BURN_BUDGET (50e18).
  */
 import {
   createPublicClient,
@@ -47,6 +53,14 @@ const hookAbi = parseAbi([
   "error SlippageExceeded(uint256 actual, uint256 minimum)",
 ]);
 
+const splitterAbi = parseAbi(["function distribute(address asset)"]);
+
+const burnerAbi = parseAbi([
+  "function distribute()",
+  "function buybackBudget() view returns (uint256)",
+  "function buyAndBurn(uint256 quoteIn, uint256 minOut, uint256 deadline) returns (uint256)",
+]);
+
 const RPC_URL = process.env.RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
 const FACTORY = process.env.FACTORY ?? "0x461523A203fAea6520089A620b9321e5bd37b440";
 const HOOK = process.env.HOOK ?? "0xf91f859e21dC93da086f38e0105ad96C05d22044";
@@ -57,6 +71,14 @@ const LIST_MS = Number(process.env.LIST_MS ?? 30_000);
 const SWEEP_MS = Number(process.env.SWEEP_MS ?? 900_000);
 /** Slippage room below the simulated conversion output, in basis points. */
 const SWEEP_SLIPPAGE_BPS = BigInt(process.env.SWEEP_SLIPPAGE_BPS ?? 700);
+const SPLITTER = process.env.SPLITTER ?? "0x90f4f16BA23121dA8B30f5BcdEd3a0eC433ec417";
+const BURNER = process.env.BURNER ?? "0xBFB11CAa7e5C7578Dd265261e8d17dAb291A9e81";
+const QUOTE = process.env.QUOTE ?? "0x39dBED3a2bd333467115dE45665cC57F813C4571";
+/**
+ * Buying back is worth a transaction only once the budget dwarfs the gas it
+ * costs to spend it, so small budgets simply keep accruing.
+ */
+const MIN_BURN_BUDGET = BigInt(process.env.MIN_BURN_BUDGET ?? 50_000_000_000_000_000_000n);
 const LOW_BALANCE = 5_000_000_000_000_000n; // 0.005 ETH
 
 if (!process.env.KEEPER_PRIVATE_KEY) {
@@ -238,6 +260,54 @@ function poolIdOf(key) {
   );
 }
 
+/**
+ * Revenue cranks. Both `distribute` calls are permissionless and pay only
+ * fixed recipients, so the keeper is choosing timing, never destination.
+ * `buyAndBurn` is keeper-gated and spends the accrued budget on $POP that
+ * goes straight to the dead address.
+ */
+async function crankRevenue() {
+  const call = async (label, address, abi, functionName, args) => {
+    try {
+      const { request } = await publicClient.simulateContract({
+        account,
+        address,
+        abi,
+        functionName,
+        args,
+        ...(await fees()),
+      });
+      const hash = await wallet.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash, timeout: 60_000 });
+      log(`${label}: ${hash}`);
+    } catch (err) {
+      // "Nothing to distribute" is the normal state between accruals.
+      const msg = err.shortMessage ?? err.message ?? "";
+      if (!/NothingToDistribute/i.test(msg)) console.error(`${label} failed: ${msg}`);
+    }
+  };
+
+  await call("splitter.distribute", SPLITTER, splitterAbi, "distribute", [QUOTE]);
+  await call("burner.distribute", BURNER, burnerAbi, "distribute", []);
+
+  try {
+    const budget = await publicClient.readContract({
+      address: BURNER,
+      abi: burnerAbi,
+      functionName: "buybackBudget",
+    });
+    if (budget >= MIN_BURN_BUDGET) {
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+      // The burn's own floor is the pool it buys through; a zero minimum is
+      // safe here because output can only ever leave as $POP to the dead
+      // address, so a bad fill costs the burn size, never custody.
+      await call("burner.buyAndBurn", BURNER, burnerAbi, "buyAndBurn", [budget, 0n, deadline]);
+    }
+  } catch (err) {
+    console.error(`buyback budget check failed: ${err.shortMessage ?? err.message}`);
+  }
+}
+
 async function balanceWatch() {
   try {
     const bal = await publicClient.getBalance({ address: account.address });
@@ -257,5 +327,9 @@ setInterval(checkAll, CHECK_MS);
 setInterval(balanceWatch, 3_600_000);
 if (SWEEP_MS > 0) {
   await sweepAll();
+  await crankRevenue();
   setInterval(sweepAll, SWEEP_MS);
+  // Revenue is cranked just after each sweep window, so distributions pick up
+  // the fees that sweep just moved into the escrow.
+  setInterval(crankRevenue, SWEEP_MS);
 }
