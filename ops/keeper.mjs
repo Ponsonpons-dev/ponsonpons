@@ -10,28 +10,53 @@
  * curves right up to the line), so readiness is checked on a fast cadence
  * while the launch list refreshes on a slower one.
  *
- * Hook fee sweeps (`sweepPoolFees`) are operator-gated whenever a
- * conversion is involved and belong to the feeSweepOperator wallet; wire
- * that separately once revenue justifies it. The revenue splitter's and
- * burner's `distribute`/`convertAndDistribute` cranks are also
- * permissionless and can be added here later.
+ * It also sweeps every known pool on a slower cadence so creator fees land
+ * in the claimable escrow on their own. That half only works when this
+ * wallet holds the hook's `feeSweepOperator` role: converting launch-token
+ * fees means an internal swap whose price floor the caller supplies, so the
+ * hook restricts it to that one address. Without the role the sweeps are
+ * simply skipped and the bond watcher still runs.
  *
- * Env: KEEPER_PRIVATE_KEY (required), RPC_URL, FACTORY, INDEXER_URL,
- *      CHECK_MS (2000), LIST_MS (30000).
+ * The revenue splitter's and burner's `distribute`/`convertAndDistribute`
+ * cranks are permissionless and can be added here later.
+ *
+ * Env: KEEPER_PRIVATE_KEY (required), RPC_URL, FACTORY, HOOK, INDEXER_URL,
+ *      CHECK_MS (2000), LIST_MS (30000), SWEEP_MS (900000, 0 disables),
+ *      SWEEP_SLIPPAGE_BPS (700).
  */
-import { createPublicClient, createWalletClient, formatEther, http, parseAbi } from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  encodeAbiParameters,
+  formatEther,
+  http,
+  keccak256,
+  parseAbi,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 const factoryAbi = parseAbi([
   "function isBondReady(address token) view returns (bool)",
   "function bond(address token, uint256 minQuoteOut) returns (uint256)",
+  "function curvePoolKey(address token) view returns ((address,address,uint24,int24,address))",
+  "function bondedPoolKey(address token) view returns ((address,address,uint24,int24,address))",
+]);
+
+const hookAbi = parseAbi([
+  "function sweepPoolFees(bytes32 poolId, uint256 minConversionQuoteOut)",
+  "error SlippageExceeded(uint256 actual, uint256 minimum)",
 ]);
 
 const RPC_URL = process.env.RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
 const FACTORY = process.env.FACTORY ?? "0x461523A203fAea6520089A620b9321e5bd37b440";
+const HOOK = process.env.HOOK ?? "0xf91f859e21dC93da086f38e0105ad96C05d22044";
 const INDEXER = process.env.INDEXER_URL ?? "http://localhost:42069";
 const CHECK_MS = Number(process.env.CHECK_MS ?? 2_000);
 const LIST_MS = Number(process.env.LIST_MS ?? 30_000);
+/** How often every known pool is swept so creators can just claim. 0 disables. */
+const SWEEP_MS = Number(process.env.SWEEP_MS ?? 900_000);
+/** Slippage room below the simulated conversion output, in basis points. */
+const SWEEP_SLIPPAGE_BPS = BigInt(process.env.SWEEP_SLIPPAGE_BPS ?? 700);
 const LOW_BALANCE = 5_000_000_000_000_000n; // 0.005 ETH
 
 if (!process.env.KEEPER_PRIVATE_KEY) {
@@ -52,6 +77,8 @@ const wallet = createWalletClient({ account, chain, transport: http() });
 const log = (msg) => console.log(`${new Date().toISOString()} ${msg}`);
 
 let tokens = [];
+/** Graduated launches keep earning, so they stay in the sweep rotation. */
+let bondedTokens = [];
 const inFlight = new Set();
 
 async function refreshLaunches() {
@@ -60,13 +87,15 @@ async function refreshLaunches() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        query: `query { launchs(where: {phase: 0}, limit: 1000) { items { token } } }`,
+        query: `query { trading: launchs(where: {phase: 0}, limit: 1000) { items { token } } bonded: launchs(where: {phase: 1}, limit: 1000) { items { token } } }`,
       }),
       signal: AbortSignal.timeout(10_000),
     });
     const body = await res.json();
-    const items = body.data?.launchs?.items;
-    if (items) tokens = items.map((i) => i.token);
+    const trading = body.data?.trading?.items;
+    const bonded = body.data?.bonded?.items;
+    if (trading) tokens = trading.map((i) => i.token);
+    if (bonded) bondedTokens = bonded.map((i) => i.token);
   } catch (err) {
     console.error(`indexer unreachable: ${err.message}`);
   }
@@ -127,6 +156,71 @@ async function checkAll() {
   );
 }
 
+/**
+ * Sweeping moves fees out of the hook's per-pool buckets and into the escrow
+ * every creator can claim from. Whenever a pool holds launch-token fees the
+ * sweep has to convert them, and the hook only lets its trusted operator do
+ * that (the caller sets the price floor), so without this crank a creator's
+ * Claim button stays empty until someone with the operator key acts. The floor
+ * comes from simulating the sweep with an unreachable minimum: the revert
+ * carries the real output, which is then discounted by SWEEP_SLIPPAGE_BPS.
+ */
+async function sweepPool(poolId) {
+  let quoted = 0n;
+  try {
+    await publicClient.simulateContract({
+      account,
+      address: HOOK,
+      abi: hookAbi,
+      functionName: "sweepPoolFees",
+      args: [poolId, 2n ** 255n],
+    });
+    // No conversion was needed, so any floor is satisfied.
+  } catch (err) {
+    const slip = [err, err?.cause, err?.cause?.cause].find((e) => e?.data?.errorName === "SlippageExceeded");
+    if (slip) quoted = slip.data.args[0];
+    else return; // nothing pending, or the pool cannot convert right now
+  }
+  const minOut = (quoted * (10_000n - SWEEP_SLIPPAGE_BPS)) / 10_000n;
+  try {
+    const { request } = await publicClient.simulateContract({
+      account,
+      address: HOOK,
+      abi: hookAbi,
+      functionName: "sweepPoolFees",
+      args: [poolId, minOut],
+      ...(await fees()),
+    });
+    const hash = await wallet.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash, timeout: 60_000 });
+    log(`swept ${poolId} (min ${minOut}): ${hash}`);
+  } catch (err) {
+    console.error(`sweep(${poolId}) failed: ${err.shortMessage ?? err.message}`);
+  }
+}
+
+async function sweepAll() {
+  for (const token of [...tokens, ...bondedTokens]) {
+    for (const fn of ["curvePoolKey", "bondedPoolKey"]) {
+      try {
+        const key = await publicClient.readContract({ address: FACTORY, abi: factoryAbi, functionName: fn, args: [token] });
+        await sweepPool(poolIdOf(key));
+      } catch {
+        /* a launch has no bonded pool until it graduates */
+      }
+    }
+  }
+}
+
+function poolIdOf(key) {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "address" }, { type: "address" }, { type: "uint24" }, { type: "int24" }, { type: "address" }],
+      [key[0], key[1], key[2], key[3], key[4]],
+    ),
+  );
+}
+
 async function balanceWatch() {
   try {
     const bal = await publicClient.getBalance({ address: account.address });
@@ -144,3 +238,7 @@ await balanceWatch();
 setInterval(refreshLaunches, LIST_MS);
 setInterval(checkAll, CHECK_MS);
 setInterval(balanceWatch, 3_600_000);
+if (SWEEP_MS > 0) {
+  await sweepAll();
+  setInterval(sweepAll, SWEEP_MS);
+}
