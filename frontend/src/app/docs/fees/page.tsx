@@ -76,24 +76,25 @@ export default function FeesDoc() {
         token page before anyone trades, frozen at launch, and entirely theirs to pledge or keep.
       </p>
 
-      <h2>Where the protocol&apos;s share goes: $POP holders included</h2>
+      <h2>Where the protocol&apos;s share goes</h2>
       <p>
         The protocol&apos;s half of the base fee does not go to a wallet. It accrues to an on-chain{" "}
         <strong>revenue splitter</strong> that anyone can trigger. Revenue that arrives in WETH is
-        market-bought into $PONS first, which makes distribution itself another public $PONS buy, and
-        the splitter then pays <strong>15% of it to $POP holders</strong>, in $PONS, pro-rata by
-        balance, with no staking and no claim portal; the remainder goes to the protocol. Holding $POP
-        is a share of the fee stream of every token on the platform.
+        market-bought into $PONS first, which makes distribution itself another public $PONS buy.
       </p>
       <p>
-        Per $100 traded on <em>any</em> token: $0.425 to the protocol, $0.075 to $POP holders.
+        Per $100 traded on <em>any</em> token: $0.50 to the protocol.
       </p>
       <p>
-        Two disclosures, stated plainly. The holder percentage <strong>can be adjusted later on</strong>{" "}
-        by the protocol owner, in either direction, with immediate effect on revenue not yet
-        distributed; distributions that have already happened are history. And the splitter address is
-        snapshotted into every launch at creation, so the routing itself cannot be pulled out from under
-        an existing token.
+        <strong>Correction, and the reason this section changed.</strong> The splitter can pay a share
+        of that revenue to holders of the platform token, and this page previously said 15% went to
+        $POP holders. It cannot. That path pays by sending $PONS to the token contract and calling{" "}
+        <code>sync()</code>, which only exists on the holder-rewards token variant, and $POP was
+        launched in quote-burn mode. Every distribution reverted until the share was set to{" "}
+        <strong>0%</strong>, which is where it stands now. The pointer to the platform token is
+        one-time and already spent, so restoring a holder share for $POP would take a new splitter;
+        there is no promise here that it will happen. The splitter address is snapshotted into every
+        launch at creation, so routing cannot be pulled out from under an existing token.
       </p>
 
       <h2>$POP&apos;s own fees: buyback and burn</h2>

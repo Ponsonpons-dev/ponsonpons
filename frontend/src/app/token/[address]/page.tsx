@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { use } from "react";
 
+import { BurnCounter } from "@/components/BurnCounter";
 import { CreatorPanel } from "@/components/CreatorPanel";
 import { PriceChart } from "@/components/PriceChart";
 import { RewardsPanel } from "@/components/RewardsPanel";
@@ -143,6 +144,8 @@ export default function TokenPage({ params }: { params: Promise<{ address: strin
           />
         </div>
       )}
+
+      <BurnCounter token={launch.token} symbol={launch.symbol} />
 
       {launch.phase === 0 && (
         <div className="card p-3">

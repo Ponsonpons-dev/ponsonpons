@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { BurnCounter } from "@/components/BurnCounter";
 import { fmtUsd } from "@/lib/usd";
 
 import { ArrowRight, Check, Droplet, Flame, Lock } from "./icons";
@@ -168,6 +169,9 @@ export function Landing({
           <Stat value={usdOr(totals?.burned, ponsUsd)} label="Burned" />
           <Stat value={usdOr(totals?.holderRewards, ponsUsd)} label="To holders" />
         </div>
+        {/* The platform token's own burn total, funded by the creator fee the
+            project routed into buybacks instead of taking. */}
+        <BurnCounter />
       </section>
 
       {/* ── How it works ───────────────────────────────────────────────── */}

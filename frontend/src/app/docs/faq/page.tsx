@@ -134,8 +134,7 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     a: (
       <>
         50% of the 1% base fee, which is 0.5% of each trade, plus a small flat ETH fee at launch. That share is at the hard cap coded into the hook, so it can never rise. We take
-        nothing from the creator&apos;s own fee, nothing from cashback, and nothing from liquidity. And
-        15% of our share is routed on-chain to $POP holders (see the next question).
+        nothing from the creator&apos;s own fee, nothing from cashback, and nothing from liquidity.
       </>
     ),
   },
@@ -143,14 +142,19 @@ const FAQS: Array<{ q: string; a: React.ReactNode }> = [
     q: "Why hold $POP?",
     a: (
       <>
-        Because it is a share of the whole platform&apos;s fee stream. The protocol&apos;s cut of every
-        trade on every token accrues to an on-chain splitter, and 15% of it is distributed to $POP
-        holders in $PONS, pro-rata, automatically, with no staking (curve-phase revenue arrives in
-        WETH and is market-bought into $PONS before splitting, itself a public $PONS buy). On top of
-        that, 25% of $POP&apos;s
-        own creator fees buy $POP on its pool and burn it, a ratio that is immutable in the
-        burner&apos;s bytecode. Disclosure: the 15% holder share can be adjusted later on by the
-        protocol owner; the 25% burn cannot.
+        Because 25% of $POP&apos;s own creator fees buy $POP on its pool and send it to the dead
+        address, a ratio that is immutable in the burner&apos;s bytecode, and $POP&apos;s creator fee
+        has been permanently routed to that burner. Every $POP trade therefore funds a burn.
+        <br />
+        <br />
+        <strong>What this page used to say, and why it no longer does.</strong> The splitter can pay a
+        share of protocol revenue to holders of the platform token, and we described that as 15% to
+        $POP holders. It cannot be paid: the payout works by sending $PONS to the token contract and
+        calling <code>sync()</code>, which exists only on the holder-rewards token variant, and $POP
+        was launched in quote-burn mode. Distributions reverted until the share was set to 0%. The
+        splitter&apos;s pointer to the platform token is one-time and already spent, so a holder share
+        for $POP would require deploying a new splitter, and we are not promising one. Hold $POP for
+        the burn, not for a revenue share.
       </>
     ),
   },

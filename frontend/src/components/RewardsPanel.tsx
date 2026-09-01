@@ -45,7 +45,7 @@ export function RewardsPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
         abi: PopRewardTokenAbi,
         address: launch.token,
         functionName: "claim",
-        ...(await feeOverrides(publicClient)),
+        ...(await feeOverrides(publicClient, "claim")),
       });
       await publicClient?.waitForTransactionReceipt({ hash });
       await refetch();

@@ -37,7 +37,7 @@ function ClaimRow({ quoteToken, symbol, decimals }: { quoteToken: `0x${string}`;
             address: ADDRESSES.feeEscrow,
             functionName: "claimToken",
             args: [quoteToken],
-            ...(await feeOverrides(publicClient)),
+            ...(await feeOverrides(publicClient, "claim")),
           });
           await publicClient?.waitForTransactionReceipt({ hash });
           await refetch();

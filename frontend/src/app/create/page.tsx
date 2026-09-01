@@ -207,7 +207,7 @@ export default function CreatePage() {
         args: [{ ...params, salt }, 0n, quoteAddress, 0n],
         value: (launchFee ?? 0n) + devBuyAmount,
         account,
-        ...(await feeOverrides(publicClient)),
+        ...(await feeOverrides(publicClient, "launch")),
       });
 
       setStatus("Confirm in wallet…");

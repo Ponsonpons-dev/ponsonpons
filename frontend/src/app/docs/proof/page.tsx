@@ -22,7 +22,7 @@ const CONTRACTS: Array<{ name: string; address: `0x${string}`; note: string }> =
   {
     name: "PopRevenueSplitter",
     address: ADDRESSES.revenueSplitter,
-    note: "protocol fee recipient; routes 15% to $POP holders (share adjustable)",
+    note: "protocol fee recipient; holder share currently 0% (see the claim below)",
   },
   {
     name: "PopBuybackBurner",
@@ -87,8 +87,8 @@ const CLAIMS: Array<{ claim: string; how: string }> = [
       "What that owner can reach is narrow and worth reading literally: launch configs and the snipe-tax window for FUTURE launches, the $POP holder revenue share on the splitter, and constrained rescue paths for launches or fee balances that get stuck. Every rescue pays only fixed recipients, the launch's own creator recipient or the protocol's, so there is no address the owner can name. The bond rescue unlocks only after a launch has been bond-ready for 14 days, during which anyone can still bond it permissionlessly. It cannot touch locked liquidity, cannot redirect a creator's fees, and cannot change the terms of a launch that already exists.",
   },
   {
-    claim: "$POP holders are paid by code, and $POP burns by code.",
-    how: "Protocol fees accrue to the revenue splitter, and anyone can trigger the split: 15% goes to the $POP token contract and distributes pro-rata to holders on the spot. Curve-phase revenue arrives in WETH and is market-bought into PONS before splitting, so the holder share covers both phases, and each conversion is itself a public PONS buy. The percentage is owner-adjustable, in either direction, and we say so here rather than let you assume it is fixed; what is fixed is that past distributions cannot be clawed back. $POP's creator fees accrue to the buyback burner, whose 25% burn ratio is a constructor constant: that slice can only ever leave the contract as $POP sent to the dead address.",
+    claim: "$POP burns by code. The holder revenue share does not exist, and here is why.",
+    how: "$POP's creator fees accrue to the buyback burner, whose 25% burn ratio is a constructor constant: that slice can only ever leave the contract as $POP sent to the dead address, and $POP's creator fee recipient has been transferred to that burner permanently. The other 75% goes to the protocol. Separately, this page previously claimed 15% of protocol revenue was paid to $POP holders. It is not, and it cannot be: the splitter pays holders by sending $PONS to the token contract and calling sync(), a function only the holder-rewards token variant has, and $POP was launched in quote-burn mode. Every distribution reverted until the share was set to 0%. The splitter's one-time pointer to the platform token is already spent on $POP, so restoring a holder share would require a new splitter, which we are not promising. Past distributions still cannot be clawed back; there simply were none.",
   },
   {
     claim: "No proxies. No upgrades. Anywhere.",

@@ -72,11 +72,13 @@ export default function TrustDoc() {
         </li>
         <li>Rotate the fee-sweep operator, which can only trigger fee conversions with a price floor.</li>
         <li>
-          <strong>Adjust the $POP holder revenue share</strong> on the protocol&apos;s splitter, in
-          either direction (it starts at 15% and <em>can be adjusted later on</em>). The owner can also
-          point the splitter at the $POP token once, and choose the buyback burner&apos;s keeper. What
-          the owner cannot do: claw back a distribution that already happened, or change the
-          burner&apos;s 25% burn ratio, which is immutable.
+          <strong>Adjust the holder revenue share</strong> on the protocol&apos;s splitter, in either
+          direction. It launched at 15% and is currently <strong>0%</strong>: the payout requires the
+          holder-rewards token variant, $POP was launched in quote-burn mode, and distributions
+          reverted until the share was zeroed. The owner can also point the splitter at the platform
+          token once (already spent on $POP) and choose the buyback burner&apos;s keeper. What the
+          owner cannot do: claw back a distribution that already happened, or change the burner&apos;s
+          25% burn ratio, which is immutable.
         </li>
       </ul>
       <p>That is the whole surface. Anything not on that list does not exist in the code.</p>

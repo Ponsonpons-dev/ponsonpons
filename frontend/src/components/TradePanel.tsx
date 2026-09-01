@@ -167,7 +167,7 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
         address: launch.token,
         functionName: "approve",
         args: [ADDRESSES.swapRouter, unlimitedApproval ? maxUint256 : parsedAmount],
-        ...(await feeOverrides(publicClient)),
+        ...(await feeOverrides(publicClient, "trade")),
       }),
     );
 
@@ -182,7 +182,7 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
           functionName: "buyWithEth",
           args: [launch.token, bounded, deadline],
           value: parsedAmount,
-          ...(await feeOverrides(publicClient)),
+          ...(await feeOverrides(publicClient, "trade")),
         });
       }
       return writeContractAsync({
@@ -190,7 +190,7 @@ export function TradePanel({ launch, quoteInfo }: { launch: Launch; quoteInfo: Q
         address: ADDRESSES.swapRouter,
         functionName: "sellForEth",
         args: [launch.token, parsedAmount, bounded, deadline],
-        ...(await feeOverrides(publicClient)),
+        ...(await feeOverrides(publicClient, "trade")),
       });
     });
 

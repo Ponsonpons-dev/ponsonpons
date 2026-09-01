@@ -111,7 +111,7 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
                 address: ADDRESSES.feeEscrow,
                 functionName: "claimToken",
                 args: [ADDRESSES.weth],
-                ...(await feeOverrides(publicClient)),
+                ...(await feeOverrides(publicClient, "claim")),
               }),
             )
           }
@@ -128,7 +128,7 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
                 address: ADDRESSES.feeEscrow,
                 functionName: "claimToken",
                 args: [launch.quoteToken],
-                ...(await feeOverrides(publicClient)),
+                ...(await feeOverrides(publicClient, "claim")),
               }),
             )
           }
@@ -156,7 +156,7 @@ export function CreatorPanel({ launch, quoteInfo }: { launch: Launch; quoteInfo:
                   address: ADDRESSES.launchFactory,
                   functionName: "transferCreatorFeeRecipient",
                   args: [launch.token, newRecipient as `0x${string}`],
-                  ...(await feeOverrides(publicClient)),
+                  ...(await feeOverrides(publicClient, "claim")),
                 }),
               )
             }
